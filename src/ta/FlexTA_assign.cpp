@@ -957,7 +957,7 @@ int FlexTAWorker::assignIroute_bestTrack(taPin* iroute, frLayerNum lNum, int idx
          <<getDesign()->getTech()->getLayer(lNum)->getName() <<" idx1/2="
          <<idx1 <<"/" <<idx2
          <<endl;
-    exit(1);
+    // exit(1); //comment for net with only one cell (input benchmark has error)
   }
   if (enableOutput) {
     cout <<"  select track@" <<bestTrackLoc / dbu <<", cost=" <<bestCost <<endl;

@@ -231,7 +231,7 @@ void io::Parser::genGuides_split(vector<frRect> &rects, vector<map<frCoord, boos
           // add rect
           if (lineIdx.empty()) {
             cout <<"Error: genGuides_split lineIdx is empty on " << design->getTech()->getLayer(layerNum)->getName() <<endl;
-            exit(1);
+            // exit(1); Tiago Comented
           } else if (lineIdx.size() == 1) {
             auto x = *(lineIdx.begin());
             frRect tmpRect;
@@ -296,6 +296,16 @@ void io::Parser::genGuides_gCell2TermMap(map<pair<frPoint, frLayerNum>, set<frBl
         frPoint tmpIdx;
         design->getTopBlock()->getGCellIdx(box.lowerLeft(), tmpIdx);
         design->getTopBlock()->getGCellBox(tmpIdx, gcellBox);
+                
+        // auto enouth_overlap = ( gcellBox.upperRight().x() - box.lowerLeft().x() ) > 0.1 * gcellBox.width() ;
+        // if(enouth_overlap)
+        // {
+        //   cout << "TIAGO: enouth_overlap";
+        // }else{
+        //   cout << "TIAGO: net not enouth_overlap";
+        // }
+
+        // if (box.lowerLeft() == gcellBox.lowerLeft() || !enouth_overlap) {
         if (box.lowerLeft() == gcellBox.lowerLeft()) {
           condition2 = true;
         }
@@ -590,7 +600,10 @@ void io::Parser::genGuides(frNet *net, vector<frRect> &rects) {
   genGuides_initPin2GCellMap(net, pin2GCellMap);
 
   bool retry = false;
+  bool debug = true;
   while(1) {
+    if(debug)
+      std::cout << "net_guide_split " << net->getName() << std::endl;
     genGuides_split(rects, intvs, gCell2PinMap, pin2GCellMap, retry); //split on LU intersecting guides and pins
 
     // filter pin2GCellMap with aps   

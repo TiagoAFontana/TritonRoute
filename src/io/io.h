@@ -57,6 +57,9 @@ namespace fr {
         return prefTrackPatterns;
       }
 
+      // write guide
+      void writeGuideFile();
+
     protected:
       void readLef();
       void readDef();
@@ -153,8 +156,6 @@ namespace fr {
       void genGuides_final(frNet *net, std::vector<frRect> &rects, std::vector<bool> &adjVisited, std::vector<int> &adjPrevIdx, int gCnt, int nCnt,
                            std::map<frBlockObject*, std::set<std::pair<frPoint, frLayerNum> >, frBlockObjectComp> &pin2GCellMap);
 
-      // write guide
-      void writeGuideFile();
 
       // misc
       void addFakeNets();

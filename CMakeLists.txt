@@ -8,6 +8,14 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(Boost_NO_SYSTEM_PATHS TRUE)
+if (Boost_NO_SYSTEM_PATHS)
+set(BOOST_ROOT "/home/tiago/boost_1_68_0")
+set(BOOST_INCLUDE_DIR "${BOOST_ROOT}/include")
+set(BOOST_LIBRARY_DIR "${BOOST_ROOT}/lib")
+endif (Boost_NO_SYSTEM_PATHS)
+
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake)
 
 include(CheckIPOSupported)
@@ -233,32 +241,32 @@ target_compile_options( TritonRoute
 ############################################################
 # Unit testing
 ############################################################
-enable_testing()
+#enable_testing()
 
-add_executable(trTest
-  ${FLEXROUTE_HOME}/test/gcTest.cpp
-  ${FLEXROUTE_HOME}/test/fixture.cpp
-)
-
-target_link_libraries(trTest
-  flexroutelib
-)
-
-# Use the shared library if found.  We need to pass this info to
-# the code to select the corresponding include.  Using the shared
-# library speeds up compilation.
-if (Boost_unit_test_framework_FOUND)
-  message(STATUS "Boost unit_test_framework library found")
-  target_link_libraries(trTest
-    Boost::unit_test_framework
-  )
-  target_compile_definitions(trTest
-    PRIVATE
-    HAS_BOOST_UNIT_TEST_LIBRARY
-  )
-endif()
-
-add_test(NAME trTest COMMAND trTest)
+#add_executable(trTest
+#  ${FLEXROUTE_HOME}/test/gcTest.cpp
+#  ${FLEXROUTE_HOME}/test/fixture.cpp
+#)
+#
+#target_link_libraries(trTest
+#  flexroutelib
+#)
+#
+## Use the shared library if found.  We need to pass this info to
+## the code to select the corresponding include.  Using the shared
+## library speeds up compilation.
+#if (Boost_unit_test_framework_FOUND)
+#  message(STATUS "Boost unit_test_framework library found")
+#  target_link_libraries(trTest
+#    Boost::unit_test_framework
+#  )
+#  target_compile_definitions(trTest
+#    PRIVATE
+#    HAS_BOOST_UNIT_TEST_LIBRARY
+#  )
+#endif()
+#
+#add_test(NAME trTest COMMAND trTest)
 
 ############################################################
 # VTune ITT API
