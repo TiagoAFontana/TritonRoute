@@ -122,6 +122,10 @@ int main(int argc, char** argv) {
         argv++;
         argc--;
         OUT_FILE = *argv;
+      } else if (strcmp(*argv, "-outputguide") == 0) {
+        argv++;
+        argc--;
+        OUTGUIDE_FILE = *argv;
       } else if (strcmp(*argv, "-verbose") == 0) {
         argv++;
         argc--;
