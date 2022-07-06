@@ -29,6 +29,7 @@
 #include <chrono>
 #include <fstream>
 #include <boost/io/ios_state.hpp>
+#include <boost/algorithm/string.hpp>
 #include "frProfileTask.h"
 #include "dr/FlexDR.h"
 #include "db/infra/frTime.h"
@@ -1380,8 +1381,8 @@ void FlexDR::initDR(int size, bool enableDRC) {
         worker->setDRIter(0, bp);
         // set boundary pin
         worker->setEnableDRC(enableDRC);
-        worker->setFollowGuide(false);
-        //worker->setFollowGuide(true);
+        // worker->setFollowGuide(false);
+        worker->setFollowGuide(true);
         worker->setCost(DRCCOST, 0, 0, 0);
         // int workerIdx = xIdx * batchSizeY + yIdx;
         int batchIdx = (xIdx % batchStepX) * batchStepY + yIdx % batchStepY;
@@ -1697,7 +1698,18 @@ void FlexDR::searchRepair(int iter, int size, int offset, int mazeEndIter,
     cout <<flush;
   }
   end();
-}
+
+  // Temporary added by erfan
+
+  cout << "number of violations by erfan: " << getDesign()->getTopBlock()->getNumMarkers() << std::endl;
+
+  if(logAll){
+    reportDRC();
+    logNets();
+  }//end log in each iteration
+  
+
+}//end search repair
 
 void FlexDR::end() {
   vector<unsigned long long> wlen(getTech()->getLayers().size(), 0);
@@ -1796,115 +1808,720 @@ void FlexDR::end() {
   }
 }
 
+void FlexDR::getCongestion(){
+  bool enableOutput=false;
+  std::stringstream ss;
+  if(enableOutput) ss << "name,,wl,vias" << std::endl;
+
+  std::vector<std::vector<std::vector<double>>> routedWireMap;
+
+  
+
+  int numLayers = 9;
+  routedWireMap.resize(numLayers);
+  if(enableOutput) std::cout << "num layers: " << getTech()->getLayers().size() << std::endl;
+
+  std::vector<int> num_gr_points={
+    127,
+    130,
+    127,
+    130,
+    127,
+    130,
+    127,
+    130,
+    127
+  };
+
+  std::vector<int> num_gr_edges={
+    129,
+    126,
+    129,
+    126,
+    129,
+    126,
+    129,
+    126,
+    129
+  };
+
+  for (int l = 0; l < numLayers; l++) {
+      routedWireMap[l].resize(num_gr_points[l]+10, std::vector<double>(num_gr_edges[l]+10));
+  }
+
+    
+
+  frPoint bp, ep;
+
+  for (auto &net: getDesign()->getTopBlock()->getNets()) {
+  // for (auto &drNet: nets) {
+  //   auto& net = drNet->getFrNet();
+    if(enableOutput) std::cout << "net: " << net->getName() << std::endl;
+    std::vector<frCoord> xs;
+    std::vector<frCoord> ys;
+    unsigned long long net_wl = 0;
+    unsigned long long net_vias = 0;
+
+    for (auto &shape: net->getShapes()) {
+      if (shape->typeId() == frcPathSeg) {
+        auto obj = static_cast<frPathSeg*>(shape.get());
+        obj->getPoints(bp, ep);
+        auto lNum = obj->getLayerNum();
+        frCoord psLen = ep.x() - bp.x() + ep.y() - bp.y();
+        xs.push_back(ep.x());
+        xs.push_back(bp.x());
+        ys.push_back(ep.y());
+        ys.push_back(bp.y());
+        if(enableOutput)
+          std::cout << "ep.x(): " << ep.x()
+                    << ", bp.x(): " << bp.x()
+                    << ", ep.y(): " << ep.y()
+                    << ", bp.y(): " << bp.y()
+                    << ", lNum: " << (lNum/2) - 1
+                    << std::endl;
+
+        int l = (lNum/2) - 1;
+        int ep_lx = ep.x() / 3000;
+        int ep_ly = ep.y() / 3000;
+        int bp_lx = bp.x() / 3000;
+        int bp_ly = bp.y() / 3000;
+
+        int min_lx = std::min(ep_lx,bp_lx);
+        int min_ly = std::min(ep_ly,bp_ly);
+        int max_lx = std::max(ep_lx,bp_lx);
+        int max_ly = std::max(ep_ly,bp_ly);
+        if(enableOutput)
+          std::cout << "min_lx: " << min_lx 
+                    << ", min_ly: " << min_ly
+                    << ", max_lx: " << max_lx 
+                    << ", max_ly: " << max_ly 
+                    << std::endl;
+
+        for (int x = min_lx; x <= max_lx; x++)
+          for (int y = min_ly; y <= max_ly; y++) {
+            if(l%2 != 0){
+              routedWireMap[l][x][y] += 1;
+              if(enableOutput)
+                std::cout << "l: " << l
+                    << "x: " << x
+                    << "y: " << y
+                    << "routedWireMap[l][x][y]: " << routedWireMap[l][x][y] << std::endl;
+            }else{
+              routedWireMap[l][y][x] += 1;
+              if(enableOutput)
+                std::cout << "l: " << l
+                    << "x: " << y
+                    << "y: " << x
+                    << "routedWireMap[l][y][x]: " << routedWireMap[l][y][x] << std::endl;
+            }
+            
+          }
+                 
+        // wlen[lNum] += psLen;
+        // totWlen += psLen;
+        // net_wl += psLen;
+      }
+    }
+  //   for (auto &via: net->getVias()) {
+  //     auto lNum = via->getViaDef()->getCutLayerNum();
+  //     if (via->getViaDef()->isMultiCut()) {
+  //       ++mCut[lNum];
+  //       ++totMCut;
+  //       net_vias +=1;
+  //     } else {
+  //       ++sCut[lNum];
+  //       ++totSCut;
+  //       net_vias +=1;
+  //     }
+  //   }
+  //   auto max_x = *std::max_element(xs.begin(), xs.end());
+  //   auto min_x = *std::min_element(xs.begin(), xs.end());
+  //   auto max_y = *std::max_element(ys.begin(), ys.end());
+  //   auto min_y = *std::min_element(ys.begin(), ys.end());
+
+  //   auto hpwl = std::abs(max_x-min_x) + std::abs(max_y-min_y);
+  //   // ss << net->getName() 
+  //   //    << ", " << hpwl
+  //   //    << ", " << net_wl 
+  //   //    << ", " << net_vias 
+  //   //    << ", " << net->getInstTerms().size()
+  //   //    << ", " << net->getTerms().size()
+  //   //    << std::endl;// net->getNumMarkers() << std::endl;
+  //   // ss <<  net_wl 
+  //   //    << ","<< net_vias << std::endl;// "," << net.getNumMarkers() << std::endl;
+  }
+
+  for (int layerIdx = 0; layerIdx < numLayers; ++layerIdx) {
+    for (int gridline = 0; gridline < num_gr_points[layerIdx]; gridline++) {
+        for (int cp = 0; cp < num_gr_edges[layerIdx]; cp++) {
+            ss  << std::to_string(layerIdx)
+                << "," << std::to_string(gridline)
+                << "," << std::to_string(cp)
+                << "," << std::to_string(routedWireMap[layerIdx][gridline][cp])
+                << std::endl;
+            
+        }
+    }
+  }
+
+
+
+  // ss <<design->getTopBlock()->getName() 
+  //    <<", " << hpwl
+  //    <<", " << std::to_string(totWlen / getDesign()->getTopBlock()->getDBUPerUU())
+  //    <<", " << std::to_string(totSCut + totMCut)
+  //    <<", " << std::to_string(getDesign()->getTopBlock()->getNumMarkers())  <<endl;
+
+  // std::cout << "OUT_FILE: " << OUT_FILE
+  //           << ", design->getTopBlock()->getName(): " << design->getTopBlock()->getName() << std::endl;
+  std::string file_name = OUT_FILE+ ".dr.congestion.csv";
+  std::ofstream fout(file_name);
+  fout << ss.str();
+  fout.close();
+
+}//end getCongestion 
+
+void FlexDR::outOffGuideReport(){
+  bool enableOutput=false;
+  if(enableOutput)
+    std::cout << "start outOffGuideReport..." << std::endl;
+  for (auto &net: getDesign()->getTopBlock()->getNets()) {
+    if(enableOutput) std::cout << "net_name: " << net->getName() << std::endl;
+    const std::vector<std::unique_ptr<frGuide> >& guides = net->getGuides();
+
+    std::vector<std::vector<frBox>> guideBoxs;
+    int num_layers = getTech()->getLayers().size()/2;
+    // std::cout << "num_layers_: " << num_layers << std::endl;
+    guideBoxs.resize(num_layers);
+    // get guide information
+    frPoint gbp, gep;
+    frPoint idx1, idx2;
+    for(auto& guide : guides){
+      frBox gBox;
+      frBox gBox1;
+      frBox gBox2;
+      frRect rect;
+      std::vector<frCoord> xs;
+      std::vector<frCoord> ys;
+      guide->getPoints(gbp,gep);
+      getDesign()->getTopBlock()->getGCellIdx(gbp, idx1);
+      getDesign()->getTopBlock()->getGCellIdx(gep, idx2);
+      getDesign()->getTopBlock()->getGCellBox(idx1, gBox1);
+      getDesign()->getTopBlock()->getGCellBox(idx2, gBox2);
+      xs.push_back(gBox1.left());
+      xs.push_back(gBox1.right());
+      xs.push_back(gBox2.left());
+      xs.push_back(gBox2.right());
+
+      ys.push_back(gBox1.top());
+      ys.push_back(gBox1.bottom());
+      ys.push_back(gBox2.top());
+      ys.push_back(gBox2.bottom());
+      // guide->getBBox()
+      frCoord xl = *std::min_element(xs.begin(),xs.end());
+      frCoord xh = *std::max_element(xs.begin(),xs.end());
+      frCoord yl = *std::min_element(ys.begin(),ys.end());
+      frCoord yh = *std::max_element(ys.begin(),ys.end());
+
+      if(guide->getBeginLayerNum() == guide->getEndLayerNum()){
+        frBox tmpBox(xl,yl,xh,yh);
+        guideBoxs[(guide->getBeginLayerNum()/2)-1].push_back(tmpBox);
+      }
+      if(enableOutput)
+        std::cout << xl
+                  << " " << yl
+                  << " " << xh
+                  << " " << yh 
+                  <<" " << (guide->getBeginLayerNum()/2)-1
+                  <<"; " << std::endl;
+    }
+    // get shape information
+    // const std::list<std::unique_ptr<frShape> >& shapes = net->getShapes();
+    const std::list<std::unique_ptr<frVia> >& vias = net->getVias();
+    const std::list<std::unique_ptr<frShape> >& patches = net->getPatchWires();
+    frPoint bp, ep;
+
+    if(enableOutput) std::cout << "guideBoxs size: " << guideBoxs.size() << std::endl;
+    bool contain_flg=false;
+    for (auto &shape: net->getShapes()) {
+      if (shape->typeId() == frcPathSeg) {
+        auto obj = static_cast<frPathSeg*>(shape.get());
+        obj->getPoints(bp, ep);
+        auto lNum = obj->getLayerNum();
+        for(auto& guideTmp : guideBoxs[(lNum/2) - 1]){
+          // std::cout <<  ep.x()
+          //         << " " << ep.y()
+          //         << " " << bp.x()
+          //         << " " << bp.y()
+          //         << " " << (lNum/2) - 1
+          //         << std::endl;
+
+
+          frBox boxTmp(bp.x(),bp.y(),ep.x(),ep.y());
+          // std::cout << "guideTmp.x(): " << guideTmp.left()
+          //           << ", guideTmp.y(): " << guideTmp.bottom()
+          //           << ", guideTmp.x(): " << guideTmp.right()
+          //           << ", guideTmp.y(): " << guideTmp.top() << std::endl;
+          if(guideTmp.contains(boxTmp)){
+            contain_flg=true;
+            break;
+          }
+        }//end guideBoxs[l]
+        if(!contain_flg){
+          if(enableOutput) std::cout << "out-of-guide: " << net->getName() << std::endl;
+          break;
+        }
+      }//end if pathSeg
+    }//end shapes 
+    if(enableOutput)
+      std::cout << "drStart ..." << std::endl;
+    // JUST Printing
+    for (auto &shape: net->getShapes()) {
+      if (shape->typeId() == frcPathSeg) {
+        auto obj = static_cast<frPathSeg*>(shape.get());
+        obj->getPoints(bp, ep);
+        auto lNum = obj->getLayerNum();       
+        if(enableOutput)
+          std::cout <<  ep.x()
+                  << " " << ep.y()
+                  << " " << bp.x()
+                  << " " << bp.y()
+                  << " " << (lNum/2) - 1 << "; "
+                  << std::endl;
+
+      }//end if pathSeg
+    }//end shapes 
+
+
+  }
+
+}//end outOffGuideReport
+
+void FlexDR::getReportNets(){
+  std::stringstream ss;
+  ss << "net,box" << std::endl;
+    
+  
+
+  frPoint bp, ep;
+  
+
+  for (auto &net: getDesign()->getTopBlock()->getNets()) {
+    std::vector<frCoord> xs;
+    std::vector<frCoord> ys;
+    unsigned long long net_wl = 0;
+    unsigned long long net_vias = 0;
+    ss << net->getName() << ",\"";
+
+    if(net->getShapes().size() == 0){
+      ss << "\"" << std::endl;
+    }else{
+      for (auto &shape: net->getShapes()) {
+        if (shape->typeId() == frcPathSeg) {
+          auto obj = static_cast<frPathSeg*>(shape.get());
+          obj->getPoints(bp, ep);
+          auto lNum = obj->getLayerNum();
+          frCoord psLen = ep.x() - bp.x() + ep.y() - bp.y();
+          xs.push_back(ep.x());
+          xs.push_back(bp.x());
+          ys.push_back(ep.y());
+          ys.push_back(bp.y());
+          
+          ss << std::to_string(std::min(ep.x(),bp.x())) 
+            << "_" << std::to_string(std::min(ep.y(),bp.y())) 
+            << "_" << std::to_string(std::max(ep.x(),bp.x())) 
+            << "_" << std::to_string(std::max(ep.y(),bp.y())) 
+            << "_" << std::to_string(lNum) << "|";
+          
+        }
+      }
+      ss << "\""<<std::endl;
+    }
+
+    
+
+  }
+
+  std::string file_name = OUT_FILE+ ".DRReport.nets.csv";
+  std::ofstream fout(file_name);
+  fout << ss.str();
+  fout.close();
+
+}//end getReportNets
+
+void FlexDR::getReport() {
+  std::stringstream ss;
+  ss << "name,hpwl,wl,vias,instTerms,terms,time,count_reroute,routeNet_timer \
+  ,routeNet_prep_timer \ 
+  ,routeNet_prepAreaMap_timer \
+  ,routeNet_setSrc_timer \
+  ,mazePinInit_timer \ 
+  ,routeNet_getNextDst_timer \
+  ,gridGraph_search_timer \
+  ,routeNet_postAstarUpdate_timer \ 
+  ,routeNet_postAstarWritePath_timer \ 
+  ,routeNet_postAstarPatchMinAreaVio_timer \
+  ,routeNet_postRouteAddPathCost_timer \ 
+  ,gridGraph_search_inside_timer \
+  ,gridGraph_getAccessPatterns_timer \
+  ,gridGraph_connComps_timer \
+  ,gridGraph_traceBackPath_timer \
+  " << std::endl;
+    
+  vector<unsigned long long> wlen(getTech()->getLayers().size(), 0);
+  vector<unsigned long long> sCut(getTech()->getLayers().size(), 0);
+  vector<unsigned long long> mCut(getTech()->getLayers().size(), 0);
+
+  unsigned long long totWlen = 0;
+  unsigned long long totSCut = 0;
+  unsigned long long totMCut = 0;
+  frPoint bp, ep;
+  int totNum = 0;
+  // for (auto &net: nets) {
+  //   totNum += net->getNumMarkers();
+  // }
+
+  for (auto &net: getDesign()->getTopBlock()->getNets()) {
+  // for (auto &drNet: nets) {
+  //   auto& net = drNet->getFrNet();
+    std::vector<frCoord> xs;
+    std::vector<frCoord> ys;
+    unsigned long long net_wl = 0;
+    unsigned long long net_vias = 0;
+
+    for (auto &shape: net->getShapes()) {
+      if (shape->typeId() == frcPathSeg) {
+        auto obj = static_cast<frPathSeg*>(shape.get());
+        obj->getPoints(bp, ep);
+        auto lNum = obj->getLayerNum();
+        frCoord psLen = ep.x() - bp.x() + ep.y() - bp.y();
+        xs.push_back(ep.x());
+        xs.push_back(bp.x());
+        ys.push_back(ep.y());
+        ys.push_back(bp.y());
+        wlen[lNum] += psLen;
+        totWlen += psLen;
+        net_wl += psLen;
+      }
+    }
+    for (auto &via: net->getVias()) {
+      auto lNum = via->getViaDef()->getCutLayerNum();
+      if (via->getViaDef()->isMultiCut()) {
+        ++mCut[lNum];
+        ++totMCut;
+        net_vias +=1;
+      } else {
+        ++sCut[lNum];
+        ++totSCut;
+        net_vias +=1;
+      }
+    }
+    auto max_x = *std::max_element(xs.begin(), xs.end());
+    auto min_x = *std::min_element(xs.begin(), xs.end());
+    auto max_y = *std::max_element(ys.begin(), ys.end());
+    auto min_y = *std::min_element(ys.begin(), ys.end());
+
+    auto hpwl = std::abs(max_x-min_x) + std::abs(max_y-min_y);
+    ss << net->getName() 
+       << ", " << hpwl
+       << ", " << net_wl 
+       << ", " << net_vias 
+       << ", " << net->getInstTerms().size()
+       << ", " << net->getTerms().size()
+       << ", " << net->net_timer
+       << ", " << net->count_reroute
+       << ", " << net->routeNet_timer
+       << ", " << net->routeNet_prep_timer
+       << ", " << net->routeNet_prepAreaMap_timer
+       << ", " << net->routeNet_setSrc_timer
+       << ", " << net->mazePinInit_timer
+       << ", " << net->routeNet_getNextDst_timer
+       << ", " << net->gridGraph_search_timer
+       << ", " << net->routeNet_postAstarUpdate_timer
+       << ", " << net->routeNet_postAstarWritePath_timer
+       << ", " << net->routeNet_postAstarPatchMinAreaVio_timer
+       << ", " << net->routeNet_postRouteAddPathCost_timer
+       << ", " << net->gridGraph_search_inside_timer
+       << ", " << net->gridGraph_getAccessPatterns_timer
+       << ", " << net->gridGraph_connComps_timer
+       << ", " << net->gridGraph_traceBackPath_timer
+       << std::endl;// net->getNumMarkers() << std::endl;
+    // ss <<  net_wl 
+    //    << ","<< net_vias << std::endl;// "," << net.getNumMarkers() << std::endl;
+  }
+
+
+
+  // ss <<design->getTopBlock()->getName() 
+  //    <<", " << hpwl
+  //    <<", " << std::to_string(totWlen / getDesign()->getTopBlock()->getDBUPerUU())
+  //    <<", " << std::to_string(totSCut + totMCut)
+  //    <<", " << std::to_string(getDesign()->getTopBlock()->getNumMarkers())  <<endl;
+
+  // std::cout << "OUT_FILE: " << OUT_FILE
+  //           << ", design->getTopBlock()->getName(): " << design->getTopBlock()->getName() << std::endl;
+  std::string file_name = OUT_FILE+ ".DRReport.csv";
+  std::ofstream fout(file_name);
+  fout << ss.str();
+  fout.close();
+  
+}//end getReport
+
+void FlexDR::logNets(){
+  std::stringstream ss;
+  ss << "net_name,l,xl,yl,xh,yh,type" << std::endl;
+
+
+  for (auto &net: getDesign()->getTopBlock()->getNets()) { 
+      for (auto &shape: net->getShapes()) {
+        frPoint bp, ep;
+        if (shape->typeId() == frcPathSeg) {
+          auto obj = static_cast<frPathSeg*>(shape.get());
+          obj->getPoints(bp, ep);
+          auto lNum = obj->getLayerNum()/2 - 1;
+          ss << net->getName() 
+             << "," << lNum
+             << "," << bp.x()
+             << "," << bp.y()
+             << "," << ep.x()
+             << "," << ep.y()
+             << ",wire" << std::endl;
+        }
+      }//end loop shapes
+
+
+      for (auto &connFig: net->getVias()) {
+        frPoint bp, ep;
+        if (connFig->typeId() == frcVia) {
+          auto via = static_cast<frVia*>(connFig.get());
+          frBox frb;
+          frTransform xform;
+          frPoint origin;
+          via->getOrigin(origin);
+          xform.set(origin);
+          auto lNum1 = via->getViaDef()->getLayer1Num();
+          auto lNum2 = via->getViaDef()->getLayer2Num();
+          for (auto &uShape: via->getViaDef()->getLayer1Figs()) {
+            auto shape_tmp = uShape.get();
+            if (shape_tmp->typeId() == frcRect) {
+              shape_tmp->getBBox(frb);
+              frb.transform(xform);
+              ss << net->getName() 
+                << "," << lNum1/2 - 1
+                << "," << frb.left()
+                << "," << frb.bottom()
+                << "," << frb.right()
+                << "," << frb.top()
+                << ",via" << std::endl;
+            } 
+          }
+          for (auto &uShape: via->getViaDef()->getLayer2Figs()) {
+            auto shape_tmp = uShape.get();
+            if (shape_tmp->typeId() == frcRect) {
+              shape_tmp->getBBox(frb);
+              frb.transform(xform);
+              ss << net->getName() 
+                << "," << lNum2/2 - 1
+                << "," << frb.left()
+                << "," << frb.bottom()
+                << "," << frb.right()
+                << "," << frb.top()
+                << ",via" << std::endl;
+            } 
+          }
+          
+        } //end if frcVia
+      }
+      for (auto it = net->getPatchWires().begin(); it != net->getPatchWires().end();) {
+        frPoint bp, ep;
+        auto obj = static_cast<frPatchWire*>(it->get());
+        it++;
+        obj->getOrigin(bp);
+        frTransform xform;
+        xform.set(bp);
+        frBox frb;
+        auto lNum = obj->getLayerNum();
+        obj->getBBox(frb);
+        frb.transform(xform);
+        ss << net->getName() 
+            << "," << lNum/2 - 1
+            << "," << frb.left()
+            << "," << frb.bottom()
+            << "," << frb.right()
+            << "," << frb.top()
+            << ",patch" << std::endl;
+      }
+
+
+  }//end loop nets
+
+
+
+    // ss <<design->getTopBlock()->getName() 
+    //    <<", " << hpwl
+    //    <<", " << std::to_string(totWlen / getDesign()->getTopBlock()->getDBUPerUU())
+    //    <<", " << std::to_string(totSCut + totMCut)
+    //    <<", " << std::to_string(getDesign()->getTopBlock()->getNumMarkers())  <<endl;
+
+    // std::cout << "OUT_FILE: " << OUT_FILE
+    //           << ", design->getTopBlock()->getName(): " << design->getTopBlock()->getName() << std::endl;
+    std::string file_name = benchDir +  benchName+ ".dr.net."+std::to_string(iter_nets)+".csv";
+    std::ofstream fout(file_name);
+    fout << ss.str();
+    fout.close();
+    iter_nets++;
+
+}//end logNets
+
+
+
+void FlexDR::logCells(){
+  std::stringstream ss;
+  ss << "cell_name,xl,yl,xh,yh" << std::endl;
+
+  
+  for (auto &inst: getDesign()->getTopBlock()->getInsts()) {
+      frBox tmpBox;
+      inst->getBBox(tmpBox);
+
+      ss << inst->getName() 
+            << "," << tmpBox.left()  
+            << "," << tmpBox.bottom()
+            << "," <<  tmpBox.right() 
+            << "," <<  tmpBox.top()  << std::endl;    
+             
+  }
+
+  std::string file_name = benchDir +  benchName+ ".dr.cells."+std::to_string(iter_cells)+".csv";
+  std::ofstream fout(file_name);
+  fout << ss.str();
+  fout.close();
+  iter_cells++;
+
+}//end logCells
+
 void FlexDR::reportDRC() {
   double dbu = design->getTech()->getDBUPerUU();
 
-  if (DRC_RPT_FILE == string("")) {
-    if (VERBOSE > 0) {
-      cout <<"Waring: no DRC report specified, skipped writing DRC report" <<endl;
+  // if (DRC_RPT_FILE == string("")) {
+  //   if (VERBOSE > 0) {
+  //     cout <<"Waring: no DRC report specified, skipped writing DRC report" <<endl;
+  //   }
+  //   return;
+  // }
+  // cout << "DRC_RPT_FILE: " << DRC_RPT_FILE << "\n";
+  // ofstream drcRpt(DRC_RPT_FILE.c_str());
+  std::stringstream drcRpt;
+  drcRpt << "type,src,xl,yl,xh,yh,l" << std::endl;
+  
+  for (auto &marker: getDesign()->getTopBlock()->getMarkers()) {
+    auto con = marker->getConstraint();
+    if (con) {
+      if (con->typeId() == frConstraintTypeEnum::frcShortConstraint) {
+        if (getTech()->getLayer(marker->getLayerNum())->getType() == frLayerTypeEnum::ROUTING) {
+          drcRpt <<"Short";
+        } else if (getTech()->getLayer(marker->getLayerNum())->getType() == frLayerTypeEnum::CUT) {
+          drcRpt <<"CShort";
+        }
+      } else if (con->typeId() == frConstraintTypeEnum::frcMinWidthConstraint) {
+        drcRpt <<"MinWid";
+      } else if (con->typeId() == frConstraintTypeEnum::frcSpacingConstraint) {
+        drcRpt <<"MetSpc";
+      } else if (con->typeId() == frConstraintTypeEnum::frcSpacingEndOfLineConstraint) {
+        drcRpt <<"EOLSpc";
+      } else if (con->typeId() == frConstraintTypeEnum::frcSpacingTablePrlConstraint) {
+        drcRpt <<"MetSpc";
+      } else if (con->typeId() == frConstraintTypeEnum::frcCutSpacingConstraint) {
+        drcRpt <<"CutSpc";
+      } else if (con->typeId() == frConstraintTypeEnum::frcMinStepConstraint) {
+        drcRpt <<"MinStp";
+      } else if (con->typeId() == frConstraintTypeEnum::frcNonSufficientMetalConstraint) {
+        drcRpt <<"NSMet";
+      } else if (con->typeId() == frConstraintTypeEnum::frcSpacingSamenetConstraint) {
+        drcRpt <<"MetSpc";
+      } else if (con->typeId() == frConstraintTypeEnum::frcOffGridConstraint) {
+        drcRpt <<"OffGrid";
+      } else if (con->typeId() == frConstraintTypeEnum::frcMinEnclosedAreaConstraint) {
+        drcRpt <<"MinHole";
+      } else if (con->typeId() == frConstraintTypeEnum::frcAreaConstraint) {
+        drcRpt <<"MinArea";
+      } else if (con->typeId() == frConstraintTypeEnum::frcLef58CornerSpacingConstraint) {
+        drcRpt <<"CornerSpc";
+      } else if (con->typeId() == frConstraintTypeEnum::frcLef58CutSpacingConstraint) {
+        drcRpt <<"CutSpc";
+      } else if (con->typeId() == frConstraintTypeEnum::frcLef58RectOnlyConstraint) {
+        drcRpt <<"RectOnly";
+      } else if (con->typeId() == frConstraintTypeEnum::frcLef58RightWayOnGridOnlyConstraint) {
+        drcRpt <<"RightWayOnGridOnly";
+      } else if (con->typeId() == frConstraintTypeEnum::frcLef58MinStepConstraint) {
+        drcRpt <<"MinStp";
+      } else {
+        drcRpt << "unknown";
+      }
+    } else {
+      drcRpt << "nullptr";
     }
-    return;
-  }
-  //cout << DRC_RPT_FILE << "\n";
-  ofstream drcRpt(DRC_RPT_FILE.c_str());
-  if (drcRpt.is_open()) {
-    for (auto &marker: getDesign()->getTopBlock()->getMarkers()) {
-      auto con = marker->getConstraint();
-      drcRpt << "  violation type: ";
-      if (con) {
-        if (con->typeId() == frConstraintTypeEnum::frcShortConstraint) {
-          if (getTech()->getLayer(marker->getLayerNum())->getType() == frLayerTypeEnum::ROUTING) {
-            drcRpt <<"Short";
-          } else if (getTech()->getLayer(marker->getLayerNum())->getType() == frLayerTypeEnum::CUT) {
-            drcRpt <<"CShort";
+    // drcRpt <<endl;
+    // get source(s) of violation
+    drcRpt << ",";
+    for (auto src: marker->getSrcs()) {
+      if (src) {
+        switch (src->typeId()) {
+          case frcNet:
+            drcRpt << (static_cast<frNet*>(src))->getName() << " ";
+            break;
+          case frcInstTerm: {
+            frInstTerm* instTerm = (static_cast<frInstTerm*>(src));
+            drcRpt <<instTerm->getInst()->getName() <<"/" <<instTerm->getTerm()->getName() << " ";
+            break;
           }
-        } else if (con->typeId() == frConstraintTypeEnum::frcMinWidthConstraint) {
-          drcRpt <<"MinWid";
-        } else if (con->typeId() == frConstraintTypeEnum::frcSpacingConstraint) {
-          drcRpt <<"MetSpc";
-        } else if (con->typeId() == frConstraintTypeEnum::frcSpacingEndOfLineConstraint) {
-          drcRpt <<"EOLSpc";
-        } else if (con->typeId() == frConstraintTypeEnum::frcSpacingTablePrlConstraint) {
-          drcRpt <<"MetSpc";
-        } else if (con->typeId() == frConstraintTypeEnum::frcCutSpacingConstraint) {
-          drcRpt <<"CutSpc";
-        } else if (con->typeId() == frConstraintTypeEnum::frcMinStepConstraint) {
-          drcRpt <<"MinStp";
-        } else if (con->typeId() == frConstraintTypeEnum::frcNonSufficientMetalConstraint) {
-          drcRpt <<"NSMet";
-        } else if (con->typeId() == frConstraintTypeEnum::frcSpacingSamenetConstraint) {
-          drcRpt <<"MetSpc";
-        } else if (con->typeId() == frConstraintTypeEnum::frcOffGridConstraint) {
-          drcRpt <<"OffGrid";
-        } else if (con->typeId() == frConstraintTypeEnum::frcMinEnclosedAreaConstraint) {
-          drcRpt <<"MinHole";
-        } else if (con->typeId() == frConstraintTypeEnum::frcAreaConstraint) {
-          drcRpt <<"MinArea";
-        } else if (con->typeId() == frConstraintTypeEnum::frcLef58CornerSpacingConstraint) {
-          drcRpt <<"CornerSpc";
-        } else if (con->typeId() == frConstraintTypeEnum::frcLef58CutSpacingConstraint) {
-          drcRpt <<"CutSpc";
-        } else if (con->typeId() == frConstraintTypeEnum::frcLef58RectOnlyConstraint) {
-          drcRpt <<"RectOnly";
-        } else if (con->typeId() == frConstraintTypeEnum::frcLef58RightWayOnGridOnlyConstraint) {
-          drcRpt <<"RightWayOnGridOnly";
-        } else if (con->typeId() == frConstraintTypeEnum::frcLef58MinStepConstraint) {
-          drcRpt <<"MinStp";
-        } else {
-          drcRpt << "unknown";
-        }
-      } else {
-        drcRpt << "nullptr";
-      }
-      drcRpt <<endl;
-      // get source(s) of violation
-      drcRpt << "    srcs: ";
-      for (auto src: marker->getSrcs()) {
-        if (src) {
-          switch (src->typeId()) {
-            case frcNet:
-              drcRpt << (static_cast<frNet*>(src))->getName() << " ";
-              break;
-            case frcInstTerm: {
-              frInstTerm* instTerm = (static_cast<frInstTerm*>(src));
-              drcRpt <<instTerm->getInst()->getName() <<"/" <<instTerm->getTerm()->getName() << " ";
-              break;
-            }
-            case frcTerm: {
-              frTerm* term = (static_cast<frTerm*>(src));
-              drcRpt <<"PIN/" << term->getName() << " ";
-              break;
-            }
-            case frcInstBlockage: {
-              frInstBlockage* instBlockage = (static_cast<frInstBlockage*>(src));
-              drcRpt <<instBlockage->getInst()->getName() <<"/OBS" << " ";
-              break;
-            }
-            case frcBlockage: {
-              drcRpt << "PIN/OBS" << " ";
-              break;
-            }
-            default:
-              std::cout << "Error: unexpected src type in marker\n";
+          case frcTerm: {
+            frTerm* term = (static_cast<frTerm*>(src));
+            drcRpt <<"PIN/" << term->getName() << " ";
+            break;
           }
+          case frcInstBlockage: {
+            frInstBlockage* instBlockage = (static_cast<frInstBlockage*>(src));
+            drcRpt <<instBlockage->getInst()->getName() <<"/OBS" << " ";
+            break;
+          }
+          case frcBlockage: {
+            drcRpt << "PIN/OBS" << " ";
+            break;
+          }
+          default:
+            std::cout << "Error: unexpected src type in marker\n";
         }
-      }
-      drcRpt << "\n";
-      // get violation bbox
-      frBox bbox;
-      marker->getBBox(bbox);
-      drcRpt << "    bbox = ( " << bbox.left() / dbu << ", " << bbox.bottom() / dbu << " ) - ( "
-             << bbox.right() / dbu << ", " << bbox.top() / dbu << " ) on Layer ";
-      if (getTech()->getLayer(marker->getLayerNum())->getType() == frLayerTypeEnum::CUT && 
-          marker->getLayerNum() - 1 >= getTech()->getBottomLayerNum()) {
-        drcRpt << getTech()->getLayer(marker->getLayerNum() - 1)->getName() << "\n";
-      } else {
-        drcRpt << getTech()->getLayer(marker->getLayerNum())->getName() << "\n";
       }
     }
-  } else {
-    cout << "Error: Fail to open DRC report file\n";
+    drcRpt << ",";
+    // get violation bbox
+    frBox bbox;
+    marker->getBBox(bbox);
+    drcRpt << bbox.left() << "," << bbox.bottom() << ","
+            << bbox.right() << "," << bbox.top() << ",";
+    if (getTech()->getLayer(marker->getLayerNum())->getType() == frLayerTypeEnum::CUT && 
+        marker->getLayerNum() - 1 >= getTech()->getBottomLayerNum()) {
+      // drcRpt << getTech()->getLayer(marker->getLayerNum() - 1)->getName() << "\n";
+      drcRpt << (marker->getLayerNum()/2) - 1 << "\n";
+    } else {
+      // drcRpt << getTech()->getLayer(marker->getLayerNum())->getName() << "\n";
+      drcRpt << (marker->getLayerNum()/2)-1 << "\n";
+    }
   }
+
+
+  if(logAll){
+    std::string file_name_csv =  benchDir +  benchName+ ".dr.drc."+std::to_string(iter_drc)+".csv";
+    // std::cout << "log name: " << file_name_csv << std::endl;
+    std::ofstream fout(file_name_csv);
+    fout << drcRpt.str();
+    fout.close();
+  }
+  
+
+
+  iter_drc++;
   
 }
 
@@ -1932,74 +2549,206 @@ int FlexDR::main() {
   //searchRepair(1,  7, -4,  1, DRCCOST, 0,          0, 0, true, 1, false, 0, true); // test mode
 
   // need three different offsets to resolve boundary corner issues
+  // bool debug_erfan = false;
 
   int iterNum = 0;
-  searchRepair(iterNum++/*  0 */,  7,  0, 3, DRCCOST, 0/*MAARKERCOST*/,  0, 0, true, 1, true, 9); // true search and repair
-  searchRepair(iterNum++/*  1 */,  7, -2, 3, DRCCOST, DRCCOST/*MAARKERCOST*/,  0, 0, true, 1, true, 9); // true search and repair
-  searchRepair(iterNum++/*  1 */,  7, -5, 3, DRCCOST, DRCCOST/*MAARKERCOST*/,  0, 0, true, 1, true, 9); // true search and repair
-  searchRepair(iterNum++/*  3 */,  7,  0, 8, DRCCOST, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/*  4 */,  7, -1, 8, DRCCOST, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/*  5 */,  7, -2, 8, DRCCOST, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/*  6 */,  7, -3, 8, DRCCOST, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/*  7 */,  7, -4, 8, DRCCOST, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/*  8 */,  7, -5, 8, DRCCOST, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/*  9 */,  7, -6, 8, DRCCOST, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 10 */,  7,  0, 8, DRCCOST*2, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 11 */,  7, -1, 8, DRCCOST*2, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 12 */,  7, -2, 8, DRCCOST*2, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 13 */,  7, -3, 8, DRCCOST*2, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 14 */,  7, -4, 8, DRCCOST*2, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 15 */,  7, -5, 8, DRCCOST*2, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 16 */,  7, -6, 8, DRCCOST*2, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* ra'*/,  7, -3, 8, DRCCOST, MARKERCOST,  0, 0, true, 1, false, 9); // true search and repair
-  searchRepair(iterNum++/* 17 */,  7,  0, 8, DRCCOST*4, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 18 */,  7, -1, 8, DRCCOST*4, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 19 */,  7, -2, 8, DRCCOST*4, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 20 */,  7, -3, 8, DRCCOST*4, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 21 */,  7, -4, 8, DRCCOST*4, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 22 */,  7, -5, 8, DRCCOST*4, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 23 */,  7, -6, 8, DRCCOST*4, MARKERCOST,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* ra'*/,  5, -2, 8, DRCCOST, MARKERCOST,  0, 0, true, 1, false, 9); // true search and repair
-  searchRepair(iterNum++/* 24 */,  7,  0, 8, DRCCOST*8, MARKERCOST*2,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 25 */,  7, -1, 8, DRCCOST*8, MARKERCOST*2,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 26 */,  7, -2, 8, DRCCOST*8, MARKERCOST*2,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 27 */,  7, -3, 8, DRCCOST*8, MARKERCOST*2,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 28 */,  7, -4, 8, DRCCOST*8, MARKERCOST*2,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 29 */,  7, -5, 8, DRCCOST*8, MARKERCOST*2,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 30 */,  7, -6, 8, DRCCOST*8, MARKERCOST*2,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* ra'*/,  3, -1, 8, DRCCOST, MARKERCOST,  0, 0, true, 1, false, 9); // true search and repair
-  searchRepair(iterNum++/* 31 */,  7,  0, 8, DRCCOST*16, MARKERCOST*4,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 32 */,  7, -1, 8, DRCCOST*16, MARKERCOST*4,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 33 */,  7, -2, 8, DRCCOST*16, MARKERCOST*4,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 34 */,  7, -3, 8, DRCCOST*16, MARKERCOST*4,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 35 */,  7, -4, 8, DRCCOST*16, MARKERCOST*4,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 36 */,  7, -5, 8, DRCCOST*16, MARKERCOST*4,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 37 */,  7, -6, 8, DRCCOST*16, MARKERCOST*4,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* ra'*/,  3, -2, 8, DRCCOST, MARKERCOST,  0, 0, true, 1, false, 9); // true search and repair
-  searchRepair(iterNum++/* 38 */,  7,  0, 16, DRCCOST*16, MARKERCOST*4,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 39 */,  7, -1, 16, DRCCOST*16, MARKERCOST*4,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 40 */,  7, -2, 16, DRCCOST*16, MARKERCOST*4,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 41 */,  7, -3, 16, DRCCOST*16, MARKERCOST*4,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 42 */,  7, -4, 16, DRCCOST*16, MARKERCOST*4,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 43 */,  7, -5, 16, DRCCOST*16, MARKERCOST*4,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 44 */,  7, -6, 16, DRCCOST*16, MARKERCOST*4,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* ra'*/,  3, -0, 8, DRCCOST, MARKERCOST,  0, 0, true, 1, false, 9); // true search and repair
-  searchRepair(iterNum++/* 45 */,  7,  0, 32, DRCCOST*32, MARKERCOST*8,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 46 */,  7, -1, 32, DRCCOST*32, MARKERCOST*8,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 47 */,  7, -2, 32, DRCCOST*32, MARKERCOST*8,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 48 */,  7, -3, 32, DRCCOST*32, MARKERCOST*8,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 49 */,  7, -4, 32, DRCCOST*32, MARKERCOST*8,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 50 */,  7, -5, 32, DRCCOST*32, MARKERCOST*8,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 51 */,  7, -6, 32, DRCCOST*32, MARKERCOST*8,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* ra'*/,  3, -1, 8, DRCCOST, MARKERCOST,  0, 0, true, 1, false, 9); // true search and repair
-  searchRepair(iterNum++/* 52 */,  7,  0, 64, DRCCOST*64, MARKERCOST*16,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 53 */,  7, -1, 64, DRCCOST*64, MARKERCOST*16,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 54 */,  7, -2, 64, DRCCOST*64, MARKERCOST*16,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 55 */,  7, -3, 64, DRCCOST*64, MARKERCOST*16,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 56 */,  7, -4, 64, DRCCOST*64, MARKERCOST*16,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 57 */,  7, -5, 64, DRCCOST*64, MARKERCOST*16,  0, 0, true, 0, false, 9); // true search and repair
-  searchRepair(iterNum++/* 58 */,  7, -6, 64, DRCCOST*64, MARKERCOST*16,  0, 0, true, 0, false, 9); // true search and repair
+  // if(debug_erfan){   
+  //   std::vector<int> offsets = {
+  //     0,-2,-5,0,-1,-2,-3,-4,-5,-6,0,-1,-2,-3,-4,-5,
+  //     -6,-3, 0,-1,-2,-3,-4,-5,-6,-2,0,-1,-2,-3,-4,-5,-6,
+  //     -1,0,-1,-2,-3,-4,-5,-6,-2,0,-1,-2,-3,-4,-5,-6,-0,
+  //     0,-1,-2,-3,-4,-5,-6,-1, 0,-1,-2,-3,-4,-5,-6
+  //   };
 
+  //   std::vector<int> mazeEndIters = {
+  //   3,3, 3, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+  //   8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+  //   8, 8, 8, 8, 8, 8, 8, 8, 8, 16,16,16,16,16,16,16,8, 32,
+  //   32,32,32,32,32,32,8, 64,64,64,64,64,64,64
+  //   };
+
+  //   std::vector<int> DRCCosts = {
+  //     DRCCOST, DRCCOST,    DRCCOST,    DRCCOST,    DRCCOST,    DRCCOST,    DRCCOST,    
+  //     DRCCOST,    DRCCOST,    DRCCOST,    DRCCOST*2,  DRCCOST*2,  DRCCOST*2,  DRCCOST*2,  
+  //     DRCCOST*2,  DRCCOST*2,  DRCCOST*2,  DRCCOST,    DRCCOST*4,  DRCCOST*4,  DRCCOST*4,  
+  //     DRCCOST*4,  DRCCOST*4,  DRCCOST*4,  DRCCOST*4,  DRCCOST,    DRCCOST*8,  DRCCOST*8,  
+  //     DRCCOST*8,  DRCCOST*8,  DRCCOST*8,  DRCCOST*8,  DRCCOST*8,  DRCCOST,    DRCCOST*16, 
+  //     DRCCOST*16, DRCCOST*16, DRCCOST*16, DRCCOST*16, DRCCOST*16, DRCCOST*16, DRCCOST,    
+  //     DRCCOST*16, DRCCOST*16, DRCCOST*16, DRCCOST*16, DRCCOST*16, DRCCOST*16, DRCCOST*16,
+  //     DRCCOST,   DRCCOST*32, DRCCOST*32, DRCCOST*32, DRCCOST*32, DRCCOST*32, DRCCOST*32,
+  //     DRCCOST*32,DRCCOST,     DRCCOST*64, DRCCOST*64, DRCCOST*64,DRCCOST*64, DRCCOST*64,
+  //     DRCCOST*64, DRCCOST*64
+  //   };
+
+  //   std::vector<int> markerCosts = {
+  //     0,DRCCOST,        DRCCOST,        MARKERCOST,     MARKERCOST,     MARKERCOST,     
+  //     MARKERCOST,     MARKERCOST,     MARKERCOST,     MARKERCOST,     MARKERCOST,     
+  //     MARKERCOST,     MARKERCOST,     MARKERCOST,     MARKERCOST,     MARKERCOST,     
+  //     MARKERCOST,     MARKERCOST,     MARKERCOST,     MARKERCOST,     MARKERCOST,     
+  //     MARKERCOST,     MARKERCOST,     MARKERCOST,     MARKERCOST,     MARKERCOST,     
+  //     MARKERCOST*2,   MARKERCOST*2,   MARKERCOST*2,   MARKERCOST*2,   MARKERCOST*2,   
+  //     MARKERCOST*2,   MARKERCOST*2,   MARKERCOST,     MARKERCOST*4,   MARKERCOST*4,   
+  //     MARKERCOST*4,   MARKERCOST*4,   MARKERCOST*4,   MARKERCOST*4,   MARKERCOST*4,   
+  //     MARKERCOST,     MARKERCOST*4,  MARKERCOST*4,   MARKERCOST*4,   MARKERCOST*4,   
+  //     MARKERCOST*4,   MARKERCOST*4,   MARKERCOST*4,   MARKERCOST,     MARKERCOST*8,  
+  //     MARKERCOST*8,   MARKERCOST*8,   MARKERCOST*8,   MARKERCOST*8,   MARKERCOST*8,  
+  //     MARKERCOST*8,   MARKERCOST,     MARKERCOST*16,  MARKERCOST*16,  MARKERCOST*16, 
+  //     MARKERCOST*16,  MARKERCOST*16,  MARKERCOST*16,  MARKERCOST*16 
+  //   };
+
+  //   std::vector<int> ripupModes = {
+  //       1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,
+  //       0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,
+  //       0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0
+  //   };
+
+  //   std::vector<bool> followGuides = {
+  //     true, true, true, false,false,false,false,false,false,false,
+  //     false,false,false,false,false,false,false,false,false,false,
+  //     false,false,false,false,false,false,false,false,false,false,
+  //     false,false,false,false,false,false,false,false,false,false,
+  //     false,false,false,false,false,false,false,false,false,false,
+  //     false,false,false,false,false,false,false,false,false,false,
+  //     false,false,false,false,false
+  //   };
+
+  //   for(int i = 0; i < 59; i++){
+  //     searchRepair(i // iter
+  //                 ,7 // size
+  //                 ,offsets[i]  //offsets
+  //                 ,mazeEndIters[i] //mazeEndIters
+  //                 ,DRCCosts[i] // DRCCosts
+  //                 ,markerCosts[i] // markerCosts
+  //                 ,0//workerMarkerBloatWidth
+  //                 ,0//workerMarkerBloatDepth
+  //                 ,true // enableDRC 
+  //                 ,ripupModes[i] // ripupModes
+  //                 ,true//followGuides[i] // followGuides
+  //                 ,9//true search and repair
+  //                 );
+  //   }//end for 
+  // }
+
+  // Temporary parse 
+  int dr_optimization_iteration = std::stoi(DR_OPTIMIZATION_ITERATION);
+
+
+// std::string ="";
+// std::string ="";
+// std::string DR_DRCCOSTS="";
+// std::string DR_MARKERCOSTS="";
+// std::string DR_RIPUPMODES="";
+// std::string DR_FOLLOWGUIDES="";
+  vector<std ::string> dr_offsets;  
+  vector<std ::string> dr_mazeEndIters;  
+  vector<std ::string> dr_drcCosts;  
+  vector<std ::string> dr_markerCosts;  
+  vector<std ::string> dr_ripupModes;  
+  vector<std ::string> dr_followGuides;  
+  vector<bool> dr_followGuides_bool;  
+
+
+  boost::split(dr_offsets, DR_OFFSETS, boost::is_any_of(","));
+  boost::split(dr_mazeEndIters, DR_MAZEENDITERS, boost::is_any_of(","));
+  boost::split(dr_drcCosts, DR_DRCCOSTS, boost::is_any_of(","));
+  boost::split(dr_markerCosts, DR_MARKERCOSTS, boost::is_any_of(","));
+  boost::split(dr_ripupModes, DR_RIPUPMODES, boost::is_any_of(","));
+  boost::split(dr_followGuides, DR_FOLLOWGUIDES, boost::is_any_of(","));
+
+  for(auto follow_guide : dr_followGuides){
+    if(follow_guide=="true"){
+      dr_followGuides_bool.push_back(true);
+    }else{
+      dr_followGuides_bool.push_back(false);
+    }
+  }//end loop 
+  
+  if(dr_optimization_iteration>=1){
+    for(int i = 0; i < dr_optimization_iteration; i++){
+      searchRepair(i // iter
+                  ,7 // size
+                  ,std::stoi(dr_offsets[i]) //offsets
+                  ,std::stoi(dr_mazeEndIters[i]) //mazeEndIters
+                  ,std::stof(dr_drcCosts[i])*DRCCOST // DRCCosts
+                  ,std::stof(dr_markerCosts[i])*MARKERCOST // markerCosts
+                  ,0//workerMarkerBloatWidth
+                  ,0//workerMarkerBloatDepth
+                  ,true // enableDRC 
+                  ,std::stoi(dr_ripupModes[i]) // ripupModes
+                  ,dr_followGuides_bool[i]//followGuides[i] // followGuides
+                  ,9//true search and repair
+                  );
+    }//end for 
+  }else{
+    searchRepair(iterNum++/*  0 */,  7,  0, 3, DRCCOST,    0      ,              0, 0, true, 1, true, 9); // true search and repair
+    searchRepair(iterNum++/*  1 */,  7, -2, 3, DRCCOST,    DRCCOST,              0, 0, true, 1, true, 9); // true search and repair
+    searchRepair(iterNum++/*  1 */,  7, -5, 3, DRCCOST,    DRCCOST,              0, 0, true, 1, true, 9); // true search and repair
+    searchRepair(iterNum++/*  3 */,  7,  0, 8, DRCCOST,    MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/*  4 */,  7, -1, 8, DRCCOST,    MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/*  5 */,  7, -2, 8, DRCCOST,    MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/*  6 */,  7, -3, 8, DRCCOST,    MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/*  7 */,  7, -4, 8, DRCCOST,    MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/*  8 */,  7, -5, 8, DRCCOST,    MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/*  9 */,  7, -6, 8, DRCCOST,    MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 10 */,  7,  0, 8, DRCCOST*2,  MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 11 */,  7, -1, 8, DRCCOST*2,  MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 12 */,  7, -2, 8, DRCCOST*2,  MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 13 */,  7, -3, 8, DRCCOST*2,  MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 14 */,  7, -4, 8, DRCCOST*2,  MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 15 */,  7, -5, 8, DRCCOST*2,  MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 16 */,  7, -6, 8, DRCCOST*2,  MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* ra'*/,  7, -3, 8, DRCCOST,    MARKERCOST,           0, 0, true, 1, false, 9); // true search and repair
+    searchRepair(iterNum++/* 17 */,  7,  0, 8, DRCCOST*4,  MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 18 */,  7, -1, 8, DRCCOST*4,  MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 19 */,  7, -2, 8, DRCCOST*4,  MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 20 */,  7, -3, 8, DRCCOST*4,  MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 21 */,  7, -4, 8, DRCCOST*4,  MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 22 */,  7, -5, 8, DRCCOST*4,  MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 23 */,  7, -6, 8, DRCCOST*4,  MARKERCOST,           0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* ra'*/,  5, -2, 8, DRCCOST,    MARKERCOST,           0, 0, true, 1, false, 9); // true search and repair
+    searchRepair(iterNum++/* 24 */,  7,  0, 8, DRCCOST*8,  MARKERCOST*2,         0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 25 */,  7, -1, 8, DRCCOST*8,  MARKERCOST*2,         0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 26 */,  7, -2, 8, DRCCOST*8,  MARKERCOST*2,         0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 27 */,  7, -3, 8, DRCCOST*8,  MARKERCOST*2,         0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 28 */,  7, -4, 8, DRCCOST*8,  MARKERCOST*2,         0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 29 */,  7, -5, 8, DRCCOST*8,  MARKERCOST*2,         0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 30 */,  7, -6, 8, DRCCOST*8,  MARKERCOST*2,         0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* ra'*/,  3, -1, 8, DRCCOST,    MARKERCOST,           0, 0, true, 1, false, 9); // true search and repair
+    searchRepair(iterNum++/* 31 */,  7,  0, 8, DRCCOST*16, MARKERCOST*4,         0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 32 */,  7, -1, 8, DRCCOST*16, MARKERCOST*4,         0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 33 */,  7, -2, 8, DRCCOST*16, MARKERCOST*4,         0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 34 */,  7, -3, 8, DRCCOST*16, MARKERCOST*4,         0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 35 */,  7, -4, 8, DRCCOST*16, MARKERCOST*4,         0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 36 */,  7, -5, 8, DRCCOST*16, MARKERCOST*4,         0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 37 */,  7, -6, 8, DRCCOST*16, MARKERCOST*4,         0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* ra'*/,  3, -2, 8, DRCCOST,     MARKERCOST,          0, 0, true, 1, false, 9); // true search and repair
+    searchRepair(iterNum++/* 38 */,  7,  0, 16, DRCCOST*16, MARKERCOST*4,        0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 39 */,  7, -1, 16, DRCCOST*16, MARKERCOST*4,        0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 40 */,  7, -2, 16, DRCCOST*16, MARKERCOST*4,        0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 41 */,  7, -3, 16, DRCCOST*16, MARKERCOST*4,        0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 42 */,  7, -4, 16, DRCCOST*16, MARKERCOST*4,        0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 43 */,  7, -5, 16, DRCCOST*16, MARKERCOST*4,        0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 44 */,  7, -6, 16, DRCCOST*16, MARKERCOST*4,        0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* ra'*/,  3, -0, 8,   DRCCOST,   MARKERCOST,          0, 0, true, 1, false, 9); // true search and repair
+    searchRepair(iterNum++/* 45 */,  7,  0, 32, DRCCOST*32, MARKERCOST*8,        0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 46 */,  7, -1, 32, DRCCOST*32, MARKERCOST*8,        0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 47 */,  7, -2, 32, DRCCOST*32, MARKERCOST*8,        0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 48 */,  7, -3, 32, DRCCOST*32, MARKERCOST*8,        0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 49 */,  7, -4, 32, DRCCOST*32, MARKERCOST*8,        0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 50 */,  7, -5, 32, DRCCOST*32, MARKERCOST*8,        0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 51 */,  7, -6, 32, DRCCOST*32, MARKERCOST*8,        0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* ra'*/,  3, -1, 8, DRCCOST,     MARKERCOST,          0, 0, true, 1, false, 9); // true search and repair
+    searchRepair(iterNum++/* 52 */,  7,  0, 64, DRCCOST*64, MARKERCOST*16,       0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 53 */,  7, -1, 64, DRCCOST*64, MARKERCOST*16,       0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 54 */,  7, -2, 64, DRCCOST*64, MARKERCOST*16,       0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 55 */,  7, -3, 64, DRCCOST*64, MARKERCOST*16,       0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 56 */,  7, -4, 64, DRCCOST*64, MARKERCOST*16,       0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 57 */,  7, -5, 64, DRCCOST*64, MARKERCOST*16,       0, 0, true, 0, false, 9); // true search and repair
+    searchRepair(iterNum++/* 58 */,  7, -6, 64, DRCCOST*64, MARKERCOST*16,       0, 0, true, 0, false, 9); // true search and repair
+
+  }
+  
+  DRC_RPT_FILE="drc.txt";
   if (DRC_RPT_FILE != string("")) {
     reportDRC();
   }

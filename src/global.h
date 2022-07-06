@@ -35,6 +35,8 @@
 #include "frDesign.h"
 #include "db/obj/frBlock.h"
 
+
+extern bool logAll;
 extern std::string DEF_FILE;
 extern std::string GUIDE_FILE;
 extern std::string OUTGUIDE_FILE;
@@ -45,6 +47,9 @@ extern std::string REF_OUT_FILE;
 extern std::string DBPROCESSNODE;
 extern std::string OUT_MAZE_FILE;
 extern std::string DRC_RPT_FILE;
+extern std::string defFixedNets;
+extern std::string benchDir;
+extern std::string benchName;
 // to be removed
 extern int OR_SEED;
 extern double OR_K;
@@ -57,6 +62,7 @@ extern int DRCSAFEDIST ;
 extern int VERBOSE     ;
 extern int BOTTOM_ROUTING_LAYER;
 extern int TOP_ROUTING_LAYER;
+extern int IO_GUIDE_POSTPROCESSING_MODE;
 extern bool ALLOW_PIN_AS_FEEDTHROUGH;
 extern bool USENONPREFTRACKS;
 extern bool USEMINSPACING_OBS;
@@ -102,6 +108,19 @@ extern fr::frUInt4 GUIDECOST;
 extern float       MARKERDECAY;
 extern float       SHAPEBLOATWIDTH;
 extern int MISALIGNMENTCOST;
+
+extern std::string DR_OPTIMIZATION_ITERATION;
+extern std::string DR_OFFSETS;
+extern std::string DR_MAZEENDITERS;
+extern std::string DR_DRCCOSTS;
+extern std::string DR_MARKERCOSTS;
+extern std::string DR_RIPUPMODES;
+extern std::string DR_FOLLOWGUIDES;
+extern std::string DR_CRPFixedNetHelper;
+extern std::string filter_nets_name;
+extern std::set<std::string> filter_nets_set;
+
+
 
 #define DIRBITSIZE 3
 #define WAVEFRONTBUFFERSIZE 2

@@ -34,6 +34,14 @@
 #include <boost/icl/interval_set.hpp>
 #include "frDesign.h"
 
+// spanning tree aglorithms header
+#include <boost/config.hpp>
+#include <iostream>
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/prim_minimum_spanning_tree.hpp>
+#include <boost/graph/kruskal_min_spanning_tree.hpp>
+#include <fstream>
+
 namespace fr {
   namespace io {
     // not default via, upperWidth, lowerWidth, not align upper, upperArea, lowerArea, not align lower
@@ -57,8 +65,12 @@ namespace fr {
         return prefTrackPatterns;
       }
 
-      // write guide
-      void writeGuideFile();
+    public:
+      void printNodeMap(std::map<std::pair<frPoint, frLayerNum>, std::set<int> > &nodeMap);
+      void printRects(std::vector<frRect> &rects);
+
+
+      void logGuidePostprocessing();
 
     protected:
       void readLef();
@@ -130,6 +142,7 @@ namespace fr {
 
       // postProcessGuide functions
       void genGuides(frNet* net, std::vector<frRect> &rects);
+      // void genGuidesV2(frNet* net, std::vector<frRect> &rects);
       void genGuides_addCoverGuide(frNet* net, std::vector<frRect> &rects);
       void genGuides_merge(std::vector<frRect> &rects, std::vector<std::map<frCoord, boost::icl::interval_set<frCoord> > > &intvs);
       void genGuides_split(std::vector<frRect> &rects, std::vector<std::map<frCoord, boost::icl::interval_set<frCoord> > > &intvs,
@@ -153,9 +166,22 @@ namespace fr {
       bool genGuides_astar(frNet *net,
                            std::vector<bool> &adjVisited, std::vector<int> &adjPrevIdx, 
                            std::map<std::pair<frPoint, frLayerNum>, std::set<int> > &nodeMap, int &gCnt, int &nCnt, bool forceFeedThrough, bool retry);
+      bool genGuides_spanningTree(frNet *net,
+                           std::vector<bool> &adjVisited, std::vector<int> &adjPrevIdx, 
+                           std::map<std::pair<frPoint, frLayerNum>, std::set<int> > &nodeMap, int &gCnt, int &nCnt, bool forceFeedThrough, bool retry);
+
+      //minimum spanning tree for undirected graph
+      void minimum_spanning_tree_prim();
+
+      //minimum spanning tree (MST) in an undirected graph with weighted edges.
+      void minimum_spanning_tree_kruskal();
+      
       void genGuides_final(frNet *net, std::vector<frRect> &rects, std::vector<bool> &adjVisited, std::vector<int> &adjPrevIdx, int gCnt, int nCnt,
                            std::map<frBlockObject*, std::set<std::pair<frPoint, frLayerNum> >, frBlockObjectComp> &pin2GCellMap);
 
+      // write guide
+      void writeGuideFile();
+      void logGuideFile();
 
       // misc
       void addFakeNets();
@@ -187,6 +213,9 @@ namespace fr {
       void splitVia_helper(frLayerNum layerNum, int isH, frCoord trackLoc, frCoord x, frCoord y, 
                            std::vector< std::vector< std::map<frCoord, std::vector<std::shared_ptr<frPathSeg> > > > > &mergedPathSegs);
       int writeDef(bool isTA, const std::string &str = "");
+
+   
+
     };
   }
 }

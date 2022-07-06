@@ -49,6 +49,8 @@ namespace fr {
       auto time_span = std::chrono::duration_cast<std::chrono::duration<double> >(t1 - t0);
       return (time_span.count() > in);
     }
+
+    double getTime();
   protected:
     std::chrono::high_resolution_clock::time_point t0;
     clock_t t;

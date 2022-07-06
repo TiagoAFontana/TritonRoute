@@ -135,6 +135,13 @@ namespace fr {
         return (ur < boxIn.upperRight());
       }
     }
+
+    void print(){
+      std::cout << ll.x() 
+                << " " << ll.y()
+                << " " << ur.x()
+                << " " << ur.y() << std::endl;
+    }
   protected:
     frPoint ll, ur;
   };

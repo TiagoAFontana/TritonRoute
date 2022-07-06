@@ -1718,7 +1718,7 @@ void FlexGCWorker::Impl::checkMetalShape_rectOnly(gcPin* pin) {
 }
 
 void FlexGCWorker::Impl::checkMetalShape_offGrid(gcPin* pin) {
-  bool enableOutput = false;
+  bool enableOutput = true;
   auto net = pin->getNet();
   // Needs to be signed to make modulo work correctly with
   // negative coordinates

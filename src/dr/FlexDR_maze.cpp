@@ -2029,6 +2029,7 @@ void FlexDRWorker::route_2_x2_ripupNets(const frMarker &marker, drNet* net) {
 void FlexDRWorker::route_queue() {
   // bool enableOutput = true;
   bool enableOutput = false;
+  bool debug_erfan = false;
   queue<RouteQueueEntry> rerouteQueue;
 
   if (skipRouting) {
@@ -2097,6 +2098,13 @@ void FlexDRWorker::route_queue() {
   setMarkers(gcWorker.getMarkers());
 
   for (auto &net: nets) {
+    //  if(DR_CRPFixedNetHelper == "1" ){
+    //     if (filter_nets_set.find(net->getFrNet()->getName()) ==
+    //         filter_nets_set.end() && filter_nets_set.size() > 0){
+    //           continue; 
+    //         }
+    //   }
+
     net->setBestRouteConnFigs();
   }
   setBestMarkers();
@@ -2105,6 +2113,8 @@ void FlexDRWorker::route_queue() {
 void FlexDRWorker::route_queue_main(queue<RouteQueueEntry> &rerouteQueue) {
   auto &workerRegionQuery = getWorkerRegionQuery();
   while (!rerouteQueue.empty()) {
+    frTime t_net;
+    // std::cout << "joooooooo"  << std::endl;
     // cout << "rerouteQueue size = " << rerouteQueue.size() << endl;
     auto& entry = rerouteQueue.front();
     frBlockObject* obj = entry.block;
@@ -2115,8 +2125,25 @@ void FlexDRWorker::route_queue_main(queue<RouteQueueEntry> &rerouteQueue) {
     bool didRoute = false;
     bool didCheck = false;
 
-    if (obj->typeId() == drcNet && doRoute) {
+    // std::cout << "obj->typeId(): " << obj->typeId() << std::endl;
+
+
+    if (obj->typeId() == drcNet && doRoute ) {
       auto net = static_cast<drNet*>(obj);
+
+      // std::cout << "route_queue_main net: " << net->getFrNet()->getName() << std::endl;
+      // std::cout << "getNumReroutes net: " << net->getNumReroutes() << std::endl;
+      // std::cout << "numReroute: " << numReroute << std::endl;
+
+      // if(DR_CRPFixedNetHelper == "1" ){
+      //   if (filter_nets_set.find(net->getFrNet()->getName()) ==
+      //       filter_nets_set.end() && filter_nets_set.size() > 0){
+      //         continue; 
+      //       }
+      // }
+      
+
+
       if (numReroute != net->getNumReroutes()) {
         continue;
       }
@@ -2160,6 +2187,9 @@ void FlexDRWorker::route_queue_main(queue<RouteQueueEntry> &rerouteQueue) {
         exit(1);
       }
       mazeNetEnd(net);
+      // std::cout << "t_net.getTime(): " << t_net.getTime() << std::endl;
+      net->getFrNet()->net_timer +=t_net.getTime();
+      net->getFrNet()->count_reroute +=1;
       net->addNumReroutes();
       didRoute = true;
 
@@ -2243,7 +2273,9 @@ void FlexDRWorker::route_queue_main(queue<RouteQueueEntry> &rerouteQueue) {
 
     // end
     if (didCheck) {
-      route_queue_update_queue(gcWorker->getMarkers(), rerouteQueue);
+      if(DR_CRPFixedNetHelper != "1" ){
+        route_queue_update_queue(gcWorker->getMarkers(), rerouteQueue);
+      }
     }
     if (didRoute) {
       route_queue_markerCostDecay();
@@ -2251,12 +2283,15 @@ void FlexDRWorker::route_queue_main(queue<RouteQueueEntry> &rerouteQueue) {
     if (didCheck) {
       route_queue_addMarkerCost(gcWorker->getMarkers());
     }
-  }
+    
+  } //end while 
 }
 
 void FlexDRWorker::route() {
   //bool enableOutput = true;
   bool enableOutput = false;
+  bool debug_erfan = false;
+  if(debug_erfan) std::cout << "route Erfan" << std::endl;
   if (enableOutput) {
     cout << "start Maze route #nets = " <<nets.size() <<endl;
   }
@@ -2324,8 +2359,24 @@ void FlexDRWorker::route() {
         return;
       }
       for (auto net: rerouteNets) {
+
+        // if(DR_CRPFixedNetHelper == "1" ){
+        //   if (filter_nets_set.find(net->getFrNet()->getName()) ==
+        //       filter_nets_set.end() && filter_nets_set.size() >0 ){
+        //         continue; 
+        //       }
+        // }
+
+        
         mazeNetInit(net);
         bool isRouted = routeNet(net);
+
+        // if(DR_CRPFixedNetHelper == "1" ){
+        //   std::cout<< net->getFrNet()->getName() 
+        //            << " is routed " 
+        //            << isRouted << std::endl;
+        // }
+
         if (isRouted == false) {
           // TODO: output maze area
           cout << "Fatal error: Maze Route cannot find path (" << net->getFrNet()->getName() << ") in " 
@@ -2941,6 +2992,11 @@ void FlexDRWorker::routeNet_prepAreaMap(drNet* net, map<FlexMazeIdx, frCoord> &a
 }
 
 bool FlexDRWorker::routeNet(drNet* net) {
+
+
+
+  frTime t_net;
+  
   ProfileTask profile("DR:routeNet");
   //bool enableOutput = true;
   bool enableOutput = false;
@@ -2956,34 +3012,67 @@ bool FlexDRWorker::routeNet(drNet* net) {
   map<FlexMazeIdx, set<drPin*, frBlockObjectComp> > mazeIdx2unConnPins;
   set<FlexMazeIdx> apMazeIdx;
   set<FlexMazeIdx> realPinAPMazeIdx; // 
+  frTime routeNet_prep_timer;
   routeNet_prep(net, unConnPins, mazeIdx2unConnPins, apMazeIdx, realPinAPMazeIdx);
+  net->getFrNet()->routeNet_prep_timer += routeNet_prep_timer.getTime();
+  
+  frTime routeNet_prepAreaMap_timer;
   // prep for area map
   map<FlexMazeIdx, frCoord> areaMap;
   if (ENABLE_BOUNDARY_MAR_FIX) {
     routeNet_prepAreaMap(net, areaMap);
   }
+  net->getFrNet()->routeNet_prepAreaMap_timer += routeNet_prepAreaMap_timer.getTime();
 
   FlexMazeIdx ccMazeIdx1, ccMazeIdx2; // connComps ll, ur flexmazeidx
   frPoint centerPt;
   vector<FlexMazeIdx> connComps;
+  frTime routeNet_setSrc_timer;
   routeNet_setSrc(unConnPins, mazeIdx2unConnPins, connComps, ccMazeIdx1, ccMazeIdx2, centerPt);
+  net->getFrNet()->routeNet_setSrc_timer += routeNet_setSrc_timer.getTime();
 
   vector<FlexMazeIdx> path; // astar must return with >= 1 idx
   bool isFirstConn = true;
+
   while(!unConnPins.empty()) {
+    frTime mazePinInit_timer;
     mazePinInit();
+    net->getFrNet()->mazePinInit_timer += mazePinInit_timer.getTime();
+
+    frTime routeNet_getNextDst_timer;
     auto nextPin = routeNet_getNextDst(ccMazeIdx1, ccMazeIdx2, mazeIdx2unConnPins);
+    net->getFrNet()->routeNet_getNextDst_timer += routeNet_getNextDst_timer.getTime();
     path.clear();
-    if (gridGraph.search(connComps, nextPin, path, ccMazeIdx1, ccMazeIdx2, centerPt)) {
+    // -------- search time investigation
+    frTime gridGraph_search_timer;
+    bool isGridGraph = gridGraph.search(connComps, nextPin, path, ccMazeIdx1, ccMazeIdx2, centerPt,net->getFrNet());
+    net->getFrNet()->gridGraph_search_timer += gridGraph_search_timer.getTime();
+    // --------
+
+    if (isGridGraph) {
+      frTime routeNet_postAstarUpdate_timer;
       routeNet_postAstarUpdate(path, connComps, unConnPins, mazeIdx2unConnPins, isFirstConn);
+      net->getFrNet()->routeNet_postAstarUpdate_timer += routeNet_postAstarUpdate_timer.getTime();
+
+      frTime routeNet_postAstarWritePath_timer;
       routeNet_postAstarWritePath(net, path, realPinAPMazeIdx/*, apSVia*/);
+      net->getFrNet()->routeNet_postAstarWritePath_timer += routeNet_postAstarWritePath_timer.getTime();
+
+      frTime routeNet_postAstarPatchMinAreaVio_timer;
       routeNet_postAstarPatchMinAreaVio(net, path, areaMap);
+      net->getFrNet()->routeNet_postAstarPatchMinAreaVio_timer += routeNet_postAstarPatchMinAreaVio_timer.getTime();
       isFirstConn = false;
     } else {
       return false;
     }
+    
   }
+  frTime routeNet_postRouteAddPathCost_timer;
   routeNet_postRouteAddPathCost(net);
+  net->getFrNet()->routeNet_postRouteAddPathCost_timer += routeNet_postRouteAddPathCost_timer.getTime();
+
+
+  net->getFrNet()->routeNet_timer +=t_net.getTime();
   return true;
 }
 

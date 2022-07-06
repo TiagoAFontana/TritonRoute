@@ -727,7 +727,7 @@ namespace fr {
     void resetSrc();
     void resetDst();
     bool search(std::vector<FlexMazeIdx> &connComps, drPin* nextPin, std::vector<FlexMazeIdx> &path,
-                FlexMazeIdx &ccMazeIdx1, FlexMazeIdx &ccMazeIdx2, const frPoint &centerPt);
+                FlexMazeIdx &ccMazeIdx1, FlexMazeIdx &ccMazeIdx2, const frPoint &centerPt,frNet* net);
     void setCost(frUInt4 drcCostIn, frUInt4 markerCostIn) {
       ggDRCCost    = drcCostIn;
       ggMarkerCost = markerCostIn;

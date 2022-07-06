@@ -3190,6 +3190,8 @@ void FlexDRWorker::route_queue_init_queue(queue<RouteQueueEntry> &rerouteQueue) 
   set<frBlockObject*> uniqueAggressors;
   vector<RouteQueueEntry> checks;
   vector<RouteQueueEntry> routes;
+  bool debug_erfan = false;
+  // if(debug_erfan) std::cout << "worker erfan" << std::endl;
   
   if (getRipupMode() == 0) {
     for (auto &marker: markers) {
@@ -3200,6 +3202,18 @@ void FlexDRWorker::route_queue_init_queue(queue<RouteQueueEntry> &rerouteQueue) 
     // nets are ripped up during initNets()
     vector<drNet*> ripupNets;
     for (auto &net: nets) {
+      if(debug_erfan){
+          // if(net->getFrNet()->getName() != "net610") continue;
+          std::cout << "worker net: " << net->getFrNet()->getName() << std::endl;
+      }
+      if(DR_CRPFixedNetHelper == "1" ){
+        if (filter_nets_set.find(net->getFrNet()->getName()) ==
+            filter_nets_set.end() && filter_nets_set.size() > 0){
+              continue; 
+            }
+      }
+
+
       ripupNets.push_back(net.get());
     }
 
@@ -3220,16 +3234,41 @@ void FlexDRWorker::route_queue_init_queue(queue<RouteQueueEntry> &rerouteQueue) 
   } else {
     cout << "Error: unsupported ripup mode\n";
   }
-  route_queue_update_queue(checks, routes, rerouteQueue);
+  // if(DR_CRPFixedNetHelper != "1" ){
+    route_queue_update_queue(checks, routes, rerouteQueue);
+  // }
 }
 
 void FlexDRWorker::route_queue_update_queue(const vector<RouteQueueEntry> &checks,
                                             const vector<RouteQueueEntry> &routes,
                                             queue<RouteQueueEntry> &rerouteQueue) {
-  for (auto &route: routes) {
+  for (auto &route: routes) {    
+    auto& entry = rerouteQueue.front();
+    frBlockObject* obj = route.block;
+    auto net = static_cast<drNet*>(obj);
+    // std::cout << "route: " << obj->typeId() << std::endl;
+    if(DR_CRPFixedNetHelper == "1" ){
+      if (filter_nets_set.find(net->getFrNet()->getName()) ==
+          filter_nets_set.end() && filter_nets_set.size() > 0){
+            continue; 
+          }
+    }
+      
     rerouteQueue.push(route);
   }
   for (auto &check: checks) {
+    auto& entry = rerouteQueue.front();
+    frBlockObject* obj = check.block;
+    auto net = static_cast<frNet*>(obj);
+    // std::cout << "check: " << obj->typeId() << std::endl;
+   
+    if(DR_CRPFixedNetHelper == "1" ){
+      if (filter_nets_set.find(net->getName()) ==
+          filter_nets_set.end() && filter_nets_set.size() > 0){
+            continue; 
+          }
+    }
+
     rerouteQueue.push(check);
   }
 }

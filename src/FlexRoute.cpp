@@ -35,6 +35,7 @@
 #include "dr/FlexDR.h"
 #include "gc/FlexGC.h"
 #include "rp/FlexRP.h"
+#include <boost/algorithm/string.hpp>
 
 using namespace std;
 using namespace fr;
@@ -71,8 +72,18 @@ void FlexRoute::ta() {
 }
 
 void FlexRoute::dr() {
+  bool debug_erfan = false;
+  if(debug_erfan) std::cout << "start DR erfan" << std::endl;
   FlexDR dr(getDesign());
   dr.main();
+  if(logAll){
+    dr.getReport();
+    dr.getReportNets();
+  }
+  
+  // // dr.getCongestion();
+  // dr.outOffGuideReport();
+  
 }
 
 void FlexRoute::endFR() {
@@ -80,12 +91,49 @@ void FlexRoute::endFR() {
   writer.writeFromDR();
 }
 
+void FlexRoute::checkGuideVsDR(){
+  std::cout << "checkGuideVsDR" << std::endl;
+} 
+
+
+
 int FlexRoute::main() {
+  bool debug_erfan = true;
+
+  // get filter nets
+  // filter_nets_set
+  std::vector<std::string> filter_nets;
+  boost::split(filter_nets, filter_nets_name, boost::is_any_of(","));
+
+  for(auto tmp : filter_nets){
+    if(tmp != "-1")
+      filter_nets_set.insert(tmp);  
+  }
+  // 
+
+  
   init();
-  prep();
-  ta();
-  dr();
-  endFR();
+  // if(debug_erfan) checkGuideVsDR();
+  if(debug_erfan) {
+    std::cout<<"DR_CRPFixedNetHelper: " << DR_CRPFixedNetHelper << std::endl;
+    std::cout<<"defFixedNets: " << defFixedNets << std::endl;
+  }
+
+  bool debug = false;
+  if(debug){
+    FlexDR dr(getDesign());
+    dr.logNets();
+    dr.logCells();
+  }else{
+    prep();
+    ta();
+    // if(DR_CRPFixedNetHelper != "1" ){
+    dr();
+    // }
+    
+    endFR();
+  }
+  
 
   return 0;
 }

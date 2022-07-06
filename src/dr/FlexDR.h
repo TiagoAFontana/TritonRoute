@@ -68,6 +68,11 @@ namespace fr {
     const std::vector<std::vector<frCoord> >* getVia2TurnMinLen() const {
       return &via2turnMinLen;
     }
+
+    void getReport();
+    void getReportNets();
+    void getCongestion();
+    void outOffGuideReport();
   protected:
     frDesign*          design;
     std::vector<std::vector<std::map<frNet*, std::set<std::pair<frPoint, frLayerNum> >, frBlockObjectComp> > > gcell2BoundaryPin;
@@ -96,6 +101,9 @@ namespace fr {
     std::vector<std::vector<frCoord> > via2turnMinLen;
 
     std::vector<int>                   numViols;
+    int iter_drc=0;
+    int iter_nets=0;
+    int iter_cells=0;
 
     // others
     void init();
@@ -197,6 +205,9 @@ namespace fr {
 
     // utility
     void reportDRC();
+  public:
+    void logNets();
+    void logCells();
   };
 
   class FlexDRWorker;

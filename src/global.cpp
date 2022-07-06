@@ -32,6 +32,7 @@
 using namespace std;
 using namespace fr;
 
+bool logAll=false;
 string DEF_FILE;
 string GUIDE_FILE;
 string OUTGUIDE_FILE;
@@ -41,6 +42,8 @@ string OUT_FILE;
 string REF_OUT_FILE;
 string OUT_MAZE_FILE;
 string DRC_RPT_FILE;
+string benchDir;
+string benchName;
 
 // to be removed
 int OR_SEED = -1;
@@ -55,9 +58,10 @@ int    DRCSAFEDIST   = 500;
 int    VERBOSE       = 1;
 int    BOTTOM_ROUTING_LAYER = 2;
 int    TOP_ROUTING_LAYER = std::numeric_limits<frLayerNum>::max();
+int    IO_GUIDE_POSTPROCESSING_MODE = 0;
 bool   ALLOW_PIN_AS_FEEDTHROUGH = false;
 bool   USENONPREFTRACKS = true;
-bool   USEMINSPACING_OBS = true;
+bool   USEMINSPACING_OBS = false;
 bool   RESERVE_VIA_ACCESS = true;
 bool   ENABLE_BOUNDARY_MAR_FIX = true;
 bool   ENABLE_VIA_GEN = true;
@@ -97,6 +101,20 @@ frUInt4 GUIDECOST       = 1; // disabled change getNextPathCost to enable
 float   MARKERDECAY     = 0.8;
 float   SHAPEBLOATWIDTH = 3;
 int     MISALIGNMENTCOST = 8;
+
+std::string DR_OPTIMIZATION_ITERATION="";
+std::string DR_OFFSETS="";
+std::string DR_MAZEENDITERS="";
+std::string DR_DRCCOSTS="";
+std::string DR_MARKERCOSTS="";
+std::string DR_RIPUPMODES="";
+std::string DR_FOLLOWGUIDES="";
+std::string DR_CRPFixedNetHelper="";
+std::string defFixedNets = "";
+std::string filter_nets_name = "";
+std::set<std::string> filter_nets_set;
+
+            
 
 namespace fr {
 

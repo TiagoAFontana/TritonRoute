@@ -35,6 +35,7 @@
 #include "db/drObj/drShape.h"
 #include "db/drObj/drVia.h"
 #include <set>
+#include "db/infra/frTime.h"
 
 namespace fr {
   class frNet;
@@ -212,6 +213,8 @@ namespace fr {
       return (numMarkers == b.numMarkers) ? (getId() < b.getId()) : (numMarkers > b.numMarkers);
     }
 
+    
+
   protected:
     std::vector<std::unique_ptr<drPin> >         pins;
     std::vector<std::unique_ptr<drConnFig> >     extConnFigs;
@@ -231,7 +234,7 @@ namespace fr {
     int                                          numReroutes;
     bool                                         inQueue;
     bool                                         routed;
-
+    
     std::vector<frRect>                          origGuides;
   };
 }

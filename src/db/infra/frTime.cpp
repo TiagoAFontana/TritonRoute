@@ -61,6 +61,23 @@ void frTime::print() {
   guard.restore();
 }
 
+double frTime::getTime() {
+  auto t1        = std::chrono::high_resolution_clock::now();
+  // floating-point duration: no duration_cast needed
+  std::chrono::duration<double, std::milli> fp_ms = t1 - t0;
+
+  // auto time_span = std::chrono::duration_cast<std::chrono::seconds>(t1 - t0);
+  // std::cout << "time_span: " << fp_ms.count() << std::endl;
+  // int hour       = time_span.count() / 3600;
+  // int min        = (time_span.count() % 3600) / 60;
+  // int sec        = time_span.count() % 60;
+  // double t2        = (clock() - t) / CLOCKS_PER_SEC;
+  // // int chour      = t2 / 3600;
+  // // int cmin       = (t2 % 3600) / 60;
+  // // int csec       = t2 % 60;
+  return fp_ms.count();
+}
+
 namespace fr {
 
 std::ostream& operator<<(std::ostream& os, const frTime &t) {

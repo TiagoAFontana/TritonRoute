@@ -589,17 +589,19 @@ void FlexGridGraph::traceBackPath(const FlexWavefrontGrid &currGrid, vector<Flex
 }
 
 bool FlexGridGraph::search(vector<FlexMazeIdx> &connComps, drPin* nextPin, vector<FlexMazeIdx> &path, 
-                           FlexMazeIdx &ccMazeIdx1, FlexMazeIdx &ccMazeIdx2, const frPoint &centerPt) {
+                           FlexMazeIdx &ccMazeIdx1, FlexMazeIdx &ccMazeIdx2, const frPoint &centerPt, frNet* net) {
   //bool enableOutput = true;
   bool enableOutput = false;
   int stepCnt = 0;
-
+  frTime gridGraph_search_inside_timer;
   // prep nextPinBox
   frMIdx xDim, yDim, zDim;
   getDim(xDim, yDim, zDim);
   FlexMazeIdx dstMazeIdx1(xDim - 1, yDim - 1, zDim - 1);
   FlexMazeIdx dstMazeIdx2(0, 0, 0);
   FlexMazeIdx mi;
+
+  frTime gridGraph_getAccessPatterns_timer;
   for (auto &ap: nextPin->getAccessPatterns()) {
     ap->getMazeIdx(mi);
     dstMazeIdx1.set(min(dstMazeIdx1.x(), mi.x()),
@@ -609,16 +611,21 @@ bool FlexGridGraph::search(vector<FlexMazeIdx> &connComps, drPin* nextPin, vecto
                     max(dstMazeIdx2.y(), mi.y()),
                     max(dstMazeIdx2.z(), mi.z()));
   }
+  net->gridGraph_getAccessPatterns_timer += gridGraph_getAccessPatterns_timer.getTime();
 
   wavefront.cleanup();
   // init wavefront
   frPoint currPt;
+
+  frTime gridGraph_connComps_timer;
   for (auto &idx: connComps) {
     if (isDst(idx.x(), idx.y(), idx.z())) {
       if (enableOutput) {
         cout <<"message: astarSearch dst covered (" <<idx.x() <<", " <<idx.y() <<", " <<idx.z() <<")" <<endl;
       }
       path.push_back(FlexMazeIdx(idx.x(), idx.y(), idx.z()));
+      net->gridGraph_search_inside_timer += gridGraph_search_inside_timer.getTime();
+      // timer_dict["gridGraph_search_inside_timer"] += gridGraph_search_inside_timer.getTime();
       return true;
     }
     // get min area min length
@@ -636,6 +643,9 @@ bool FlexGridGraph::search(vector<FlexMazeIdx> &connComps, drPin* nextPin, vecto
       cout <<"src add to wavefront (" <<idx.x() <<", " <<idx.y() <<", " <<idx.z() <<")" <<endl;
     }
   }
+  net->gridGraph_connComps_timer += gridGraph_connComps_timer.getTime();
+
+  frTime gridGraph_traceBackPath_timer;
   while(!wavefront.empty()) {
     auto currGrid = wavefront.top();
     wavefront.pop();
@@ -655,13 +665,19 @@ bool FlexGridGraph::search(vector<FlexMazeIdx> &connComps, drPin* nextPin, vecto
       if (enableOutput) {
         cout << "path found. stepCnt = " << stepCnt << "\n";
       }
+      net->gridGraph_search_inside_timer += gridGraph_search_inside_timer.getTime();
+      net->gridGraph_traceBackPath_timer += gridGraph_traceBackPath_timer.getTime();
+      // timer_dict["gridGraph_search_inside_timer"] += gridGraph_search_inside_timer.getTime();
       return true;
     } else {
       // expand and update wavefront
       expandWavefront(currGrid, dstMazeIdx1, dstMazeIdx2, centerPt);
+      // net->gridGraph_traceBackPath_timer += gridGraph_traceBackPath_timer.getTime();
     }
     
   }
+
+
   return false;
 }
 

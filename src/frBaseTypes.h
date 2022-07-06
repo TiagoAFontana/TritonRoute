@@ -34,6 +34,7 @@
 #include <map>
 #include <string>
 #include <utility>
+#include "iostream"
 
 #include <boost/geometry/geometries/point_xy.hpp>
 #include <boost/geometry/geometries/box.hpp>

@@ -39,6 +39,7 @@ using namespace fr;
 
 int readParams(const string &fileName) {
   int readParamCnt = 0;
+  std::string logAllStr = "false";
   fstream fin(fileName.c_str());
   string line;
   if (fin.is_open()){
@@ -60,6 +61,7 @@ int readParams(const string &fileName) {
         else if (field == "outputDRC") { DRC_RPT_FILE = value; ++readParamCnt;}
         else if (field == "threads")  { MAX_THREADS = atoi(value.c_str()); ++readParamCnt;}
         else if (field == "verbose")    VERBOSE = atoi(value.c_str());
+        else if (field == "io_guide_postprocesing_mode")    IO_GUIDE_POSTPROCESSING_MODE = atoi(value.c_str());
         else if (field == "dbProcessNode") { DBPROCESSNODE = value; ++readParamCnt;}
         else if (field == "drouteOnGridOnlyPrefWireBottomLayerNum") { ONGRIDONLY_WIRE_PREF_BOTTOMLAYERNUM = atoi(value.c_str()); ++readParamCnt;}
         else if (field == "drouteOnGridOnlyPrefWireTopLayerNum") { ONGRIDONLY_WIRE_PREF_TOPLAYERNUM = atoi(value.c_str()); ++readParamCnt;}
@@ -72,10 +74,29 @@ int readParams(const string &fileName) {
         else if (field == "drouteEndIterNum") { END_ITERATION = atoi(value.c_str()); ++readParamCnt;}
         else if (field == "OR_SEED") {OR_SEED = atoi(value.c_str()); ++readParamCnt;}
         else if (field == "OR_K") {OR_K = atof(value.c_str()); ++readParamCnt;}
+        else if (field == "dr_optimization_iteration") {DR_OPTIMIZATION_ITERATION = value; ++readParamCnt;}
+        else if (field == "dr_offsets") {DR_OFFSETS = value; ++readParamCnt;}
+        else if (field == "dr_mazeEndIters") {DR_MAZEENDITERS = value; ++readParamCnt;}
+        else if (field == "dr_DRCCosts") {DR_DRCCOSTS = value; ++readParamCnt;}
+        else if (field == "dr_markerCosts") {DR_MARKERCOSTS = value; ++readParamCnt;}
+        else if (field == "dr_ripupModes") {DR_RIPUPMODES = value; ++readParamCnt;}
+        else if (field == "dr_followGuides") {DR_FOLLOWGUIDES = value; ++readParamCnt;}
+        else if (field == "DR_CRPFixedNetHelper") {DR_CRPFixedNetHelper = value; ++readParamCnt;}
+        else if (field == "defFixedNets") {defFixedNets = value; ++readParamCnt;}
+        else if (field == "filter_nets_name") {filter_nets_name = value; ++readParamCnt;}
+        else if (field == "benchDir") {benchDir = value; ++readParamCnt;}
+        else if (field == "benchName") {benchName = value; ++readParamCnt;}
+        else if (field == "logAll") {logAllStr = value; ++readParamCnt;}
+      }
+      if(logAllStr == "true"){
+        logAll = true;
+      }else{
+        logAll = false;
       }
     }
     fin.close();
   }
+
   if (readParamCnt < 5) {
     return 2;
   } else {
@@ -114,6 +135,10 @@ int main(int argc, char** argv) {
         argv++;
         argc--;
         GUIDE_FILE = *argv;
+      } else if (strcmp(*argv, "-outputguide") == 0) {
+        argv++;
+        argc--;
+        OUTGUIDE_FILE = *argv;
       } else if (strcmp(*argv, "-threads") == 0) {
         argv++;
         argc--;
@@ -122,14 +147,79 @@ int main(int argc, char** argv) {
         argv++;
         argc--;
         OUT_FILE = *argv;
-      } else if (strcmp(*argv, "-outputguide") == 0) {
-        argv++;
-        argc--;
-        OUTGUIDE_FILE = *argv;
       } else if (strcmp(*argv, "-verbose") == 0) {
         argv++;
         argc--;
         VERBOSE = atoi(*argv);
+      } else if (strcmp(*argv, "-io_guide_postprocesing_mode") == 0) {
+        argv++;
+        argc--;
+        IO_GUIDE_POSTPROCESSING_MODE = atoi(*argv);
+      }  else if (strcmp(*argv, "-dr_optimization_iteration") == 0) {
+        argv++;
+        argc--;
+        DR_OPTIMIZATION_ITERATION = *argv;
+      } else if (strcmp(*argv, "-dr_offsets") == 0) {
+        argv++;
+        argc--;
+        DR_OFFSETS = *argv;
+      } else if (strcmp(*argv, "-dr_mazeEndIters") == 0) {
+        argv++;
+        argc--;
+        DR_MAZEENDITERS = *argv;
+      } else if (strcmp(*argv, "-dr_DRCCosts") == 0) {
+        argv++;
+        argc--;
+        DR_DRCCOSTS = *argv;
+      } else if (strcmp(*argv, "-dr_markerCosts") == 0) {
+        argv++;
+        argc--;
+        DR_MARKERCOSTS = *argv;
+      } else if (strcmp(*argv, "-dr_ripupModes") == 0) {
+        argv++;
+        argc--;
+        DR_RIPUPMODES = *argv;
+      } else if (strcmp(*argv, "-dr_followGuides") == 0) {
+        argv++;
+        argc--;
+        DR_FOLLOWGUIDES = *argv;
+      } else if (strcmp(*argv, "-DR_CRPFixedNetHelper") == 0) {
+        argv++;
+        argc--;
+        DR_CRPFixedNetHelper = *argv;
+      } else if (strcmp(*argv, "-filter_nets_name") == 0) {
+        argv++;
+        argc--;
+        filter_nets_name = *argv;
+      } else if (strcmp(*argv, "-outputTA") == 0) {
+        argv++;
+        argc--;
+        OUTTA_FILE = *argv;
+      } else if (strcmp(*argv, "-defFixedNets") == 0) {
+        argv++;
+        argc--;
+        defFixedNets = *argv;
+      } else if (strcmp(*argv, "-outputDRC") == 0) {
+        argv++;
+        argc--;
+        DRC_RPT_FILE = *argv;
+      } else if (strcmp(*argv, "-benchDir") == 0) {
+        argv++;
+        argc--;
+        benchDir = *argv;
+      } else if (strcmp(*argv, "-benchName") == 0) {
+        argv++;
+        argc--;
+        benchName = *argv;
+      } else if (strcmp(*argv, "-logAll") == 0) {
+        argv++;
+        argc--;
+        std::string logAllStr = *argv;
+        if(logAllStr == "true"){
+          logAll = true;
+        }else{
+          logAll = false;
+        }
       } else {
         cout <<"ERROR: Illegal command line option: " <<*argv <<endl;
         return 2;
@@ -137,6 +227,9 @@ int main(int argc, char** argv) {
       argv++;
     }
   }
+
+
+  
   
   FlexRoute router;
   router.main();

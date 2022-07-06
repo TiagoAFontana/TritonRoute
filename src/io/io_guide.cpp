@@ -34,7 +34,7 @@ using namespace fr;
 /* note: M1 guide special treatment. search "no M1 cross-gcell routing allowed" */
 
 void io::Parser::genGuides_merge(vector<frRect> &rects, vector<map<frCoord, boost::icl::interval_set<frCoord> > > &intvs) {
-  //bool enableOutput = true;
+  //bool enableOutput = false;
   bool enableOutput = false;
 
   for (auto &rect: rects) {
@@ -51,6 +51,10 @@ void io::Parser::genGuides_merge(vector<frRect> &rects, vector<map<frCoord, boos
     frCoord y2 = idx.y();
     if (enableOutput) {
       cout << " rect " << rect << " " << x1 << " " << y1 << " " << x2 << " " << y2 << "\n";
+      cout << " box.left(): " << box.left()
+            << ", box.bottom(): " << box.bottom()
+           << ", box.right(): " << box.right()
+           << ",  box.top(): " << box.top()  << std::endl;
     }
     auto layerNum = rect.getLayerNum();
     if (tech->getLayer(layerNum)->getDir() == frcHorzPrefRoutingDir) {
@@ -231,7 +235,7 @@ void io::Parser::genGuides_split(vector<frRect> &rects, vector<map<frCoord, boos
           // add rect
           if (lineIdx.empty()) {
             cout <<"Error: genGuides_split lineIdx is empty on " << design->getTech()->getLayer(layerNum)->getName() <<endl;
-            // exit(1); Tiago Comented
+            // exit(1); //Tiago Comented
           } else if (lineIdx.size() == 1) {
             auto x = *(lineIdx.begin());
             frRect tmpRect;
@@ -296,16 +300,6 @@ void io::Parser::genGuides_gCell2TermMap(map<pair<frPoint, frLayerNum>, set<frBl
         frPoint tmpIdx;
         design->getTopBlock()->getGCellIdx(box.lowerLeft(), tmpIdx);
         design->getTopBlock()->getGCellBox(tmpIdx, gcellBox);
-                
-        // auto enouth_overlap = ( gcellBox.upperRight().x() - box.lowerLeft().x() ) > 0.1 * gcellBox.width() ;
-        // if(enouth_overlap)
-        // {
-        //   cout << "TIAGO: enouth_overlap";
-        // }else{
-        //   cout << "TIAGO: net not enouth_overlap";
-        // }
-
-        // if (box.lowerLeft() == gcellBox.lowerLeft() || !enouth_overlap) {
         if (box.lowerLeft() == gcellBox.lowerLeft()) {
           condition2 = true;
         }
@@ -345,7 +339,7 @@ void io::Parser::genGuides_gCell2TermMap(map<pair<frPoint, frLayerNum>, set<frBl
 void io::Parser::genGuides_gCell2PinMap(frNet* net, map<pair<frPoint, frLayerNum>, set<frBlockObject*, frBlockObjectComp> > &gCell2PinMap,
     map<frBlockObject*, set<pair<frPoint, frLayerNum> >, frBlockObjectComp> &pin2GCellMap) {
   bool enableOutput = false;
-  //bool enableOutput = true;
+  //bool enableOutput = false;
   for (auto &instTerm: net->getInstTerms()) {
     if (enableOutput) {
       cout <<"instTerm " <<instTerm->getInst()->getName() <<"/" <<instTerm->getTerm()->getName() <<endl;
@@ -382,7 +376,7 @@ bool io::Parser::genGuides_gCell2APInstTermMap(map<pair<frPoint, frLayerNum>, se
                                                frInstTerm* instTerm) {
   // bool enableOutput = false;
   bool isSuccess = false;
-  //bool enableOutput = true;
+  //bool enableOutput = false;
 
   if (!instTerm) {
     return isSuccess;
@@ -444,7 +438,7 @@ bool io::Parser::genGuides_gCell2APTermMap(map<pair<frPoint, frLayerNum>, set<fr
                                            frTerm* term) {
   // bool enableOutput = false;
   bool isSuccess = false;
-  //bool enableOutput = true;
+  //bool enableOutput = false;
 
   if (!term) {
     return isSuccess;
@@ -584,7 +578,7 @@ void io::Parser::genGuides_addCoverGuide(frNet *net, vector<frRect> &rects) {
 }
 
 void io::Parser::genGuides(frNet *net, vector<frRect> &rects) {
-  //bool enableOutput = true;
+  //bool enableOutput = false;
   bool enableOutput = false;
   // cout <<"net " <<net->getName() <<endl <<flush;
   vector<map<frCoord, boost::icl::interval_set<frCoord> > > intvs(tech->getLayers().size());
@@ -600,10 +594,10 @@ void io::Parser::genGuides(frNet *net, vector<frRect> &rects) {
   genGuides_initPin2GCellMap(net, pin2GCellMap);
 
   bool retry = false;
-  bool debug = true;
+  // bool debug = true;
   while(1) {
-    if(debug)
-      std::cout << "net_guide_split " << net->getName() << std::endl;
+    // if(debug)
+    //   std::cout << "net_guide_split: " << net->getName() << std::endl;
     genGuides_split(rects, intvs, gCell2PinMap, pin2GCellMap, retry); //split on LU intersecting guides and pins
 
     // filter pin2GCellMap with aps   
@@ -668,44 +662,107 @@ void io::Parser::genGuides(frNet *net, vector<frRect> &rects) {
     map<pair<frPoint, frLayerNum>, set<int> > nodeMap;
     int gCnt = 0;
     int nCnt = 0;
+    // cout <<"build node map start" <<endl ;
     genGuides_buildNodeMap(nodeMap, gCnt, nCnt, rects, pin2GCellMap);
-    //cout <<"build node map done" <<endl <<flush;
+    // cout <<"build node map done" <<endl <<flush;
 
-    vector<bool> adjVisited;
-    vector<int>  adjPrevIdx;
-    if (genGuides_astar(net, adjVisited, adjPrevIdx, nodeMap, gCnt, nCnt, false, retry)) {
-      //cout <<"astar done" <<endl <<flush;
-      genGuides_final(net, rects, adjVisited, adjPrevIdx, gCnt, nCnt, pin2GCellMap);
-      break;
-    } else {
-      if (retry) {
-        if (!ALLOW_PIN_AS_FEEDTHROUGH) {
-          if (genGuides_astar(net, adjVisited, adjPrevIdx, nodeMap, gCnt, nCnt, true, retry)) {
-            genGuides_final(net, rects, adjVisited, adjPrevIdx, gCnt, nCnt, pin2GCellMap);
-            break;
+    if(enableOutput){
+      printNodeMap(nodeMap);
+      printRects(rects);
+      std::cout << "IO_GUIDE_POSTPROCESSING_MODE: " << IO_GUIDE_POSTPROCESSING_MODE << std::endl;
+    }
+    
+    // if(IO_GUIDE_POSTPROCESSING_MODE==0){
+      vector<bool> adjVisited;
+      vector<int>  adjPrevIdx;
+      if (genGuides_astar(net, adjVisited, adjPrevIdx, nodeMap, gCnt, nCnt, false, retry)) {
+        //cout <<"astar done" <<endl <<flush;
+        genGuides_final(net, rects, adjVisited, adjPrevIdx, gCnt, nCnt, pin2GCellMap);
+        break;
+      } else {
+        if (retry) {
+          if (!ALLOW_PIN_AS_FEEDTHROUGH) {
+            if (genGuides_astar(net, adjVisited, adjPrevIdx, nodeMap, gCnt, nCnt, true, retry)) {
+              genGuides_final(net, rects, adjVisited, adjPrevIdx, gCnt, nCnt, pin2GCellMap);
+              break;
+            } else {
+              cout <<"Error: critical error guide not connected, exit now 1!" <<endl;
+              exit(1);
+            }
           } else {
-            cout <<"Error: critical error guide not connected, exit now 1!" <<endl;
+            cout <<"Error: critical error guide not connected, exit now 2!" <<endl;
             exit(1);
           }
         } else {
-          cout <<"Error: critical error guide not connected, exit now 2!" <<endl;
-          exit(1);
+          retry = true;
         }
-      } else {
-        retry = true;
       }
-    }
-  }
-}
+    // }else if(IO_GUIDE_POSTPROCESSING_MODE==1){
+    //   vector<bool> adjVisited;
+    //   vector<int>  adjPrevIdx;
+    //   if (genGuides_spanningTree(net, adjVisited, adjPrevIdx, nodeMap, gCnt, nCnt, false, retry)) {
+    //     //cout <<"astar done" <<endl <<flush;
+    //     genGuides_final(net, rects, adjVisited, adjPrevIdx, gCnt, nCnt, pin2GCellMap);
+    //     break;
+    //   }
+    // }//end if IO_GUIDE_POSTPROCESSING_MODE
+    
+  }//end while(1)
+
+  
+}//end function genGuides
 
 void io::Parser::genGuides_final(frNet *net, vector<frRect> &rects, vector<bool> &adjVisited, vector<int> &adjPrevIdx, int gCnt, int nCnt,
                                  map<frBlockObject*, set<pair<frPoint, frLayerNum> >, frBlockObjectComp> &pin2GCellMap) {
-  //bool enableOutput = true;
   bool enableOutput = false;
+  // bool enableOutput = false;
   vector<frBlockObject*> pin2ptr;
   for (auto &[obj, idxS]: pin2GCellMap) {
     pin2ptr.push_back(obj);
   }
+
+  if(enableOutput){
+    std::cout << "genGuides_final..." << std::endl;
+    for (auto &[obj, idxS]: pin2GCellMap) {
+      for(auto idx : idxS){
+        std::cout << "pt.x: " << idx.first.x() 
+                  << ", pt.y: " << idx.first.y() 
+
+                  << ", idxs: " << idx.second << std::endl;
+      }
+      
+    }
+  }
+
+  if(enableOutput){
+    for (int i = 0; i < (int)adjPrevIdx.size(); i++) {
+        std::cout << "i: " << i << ", adjPrevIdx[i]: " << adjPrevIdx[i] << std::endl;
+        if (!adjVisited[i]) {
+          std::cout << "it is not visited..." << std::endl;
+          continue;
+        }
+        int pinIdx = 0,guideIdx=0;
+        if (i < gCnt && adjPrevIdx[i] >= gCnt) {
+          pinIdx = adjPrevIdx[i] - gCnt;
+          guideIdx = i;
+        }else if (i >= gCnt && adjPrevIdx[i] >= 0 && adjPrevIdx[i] < gCnt) {
+          pinIdx = i - gCnt;
+          guideIdx = adjPrevIdx[i];
+        }
+        
+        std::cout << "pinIdx: " << pinIdx << std::endl;
+        frBox box;
+        auto &rect = rects[guideIdx];
+        rect.getBBox(box);
+        auto lNum = rect.getLayerNum();
+        auto obj = pin2ptr[pinIdx];
+        std::cout <<" guideIdx: " << guideIdx 
+                  << ", rect: " << rect 
+                  << ", lNum: " << lNum <<endl;
+      
+    }//end loop
+  }//end if enableOutput
+
   // find pin in which guide
   vector<vector<pair<frPoint, frLayerNum> > > pinIdx2GCellUpdated(nCnt - gCnt);
   vector<vector<int> > guideIdx2Pins(gCnt);
@@ -721,7 +778,7 @@ void io::Parser::genGuides_final(frNet *net, vector<frRect> &rects, vector<bool>
       rect.getBBox(box);
       auto lNum = rect.getLayerNum();
       auto obj = pin2ptr[pinIdx];
-      //cout <<" pin1 id " <<adjPrevIdx[i] <<" prev " <<i <<endl;
+      if(enableOutput) cout <<" pin1 id " <<adjPrevIdx[i] <<" prev " <<i <<endl;
       if (pin2GCellMap[obj].find(make_pair(box.lowerLeft(), lNum)) != pin2GCellMap[obj].end()) {
         pinIdx2GCellUpdated[pinIdx].push_back(make_pair(box.lowerLeft(), lNum));
       } else if (pin2GCellMap[obj].find(make_pair(box.upperRight(), lNum)) != pin2GCellMap[obj].end()) {
@@ -754,6 +811,18 @@ void io::Parser::genGuides_final(frNet *net, vector<frRect> &rects, vector<bool>
       cout <<"Error: genGuides_final pin not in any guide" <<endl;
     }
   }
+
+  if(enableOutput){
+    std::cout << "pinIdx2GCellUpdated..." << std::endl;
+    for (int i = 0; i < nCnt - gCnt; i++) {
+      std::cout << "pinIdx: " << i << std::endl;
+      for(auto &[pt, lNum] : pinIdx2GCellUpdated[i]){
+        std::cout << "x: " << pt.x() 
+                  << ", y: " << pt.y() 
+                  << ", l: " << lNum << std::endl; 
+      }//end loop
+    }//end loop
+  }//end if enableOutput
    
   map<pair<frPoint, frLayerNum>, set<int> > updatedNodeMap;
   // pinIdx2GCellUpdated tells pin residency in gcell
@@ -769,6 +838,10 @@ void io::Parser::genGuides_final(frNet *net, vector<frRect> &rects, vector<bool>
       }
     }
   }
+
+  if(enableOutput){
+    printNodeMap(updatedNodeMap);
+  }
   for (int i = 0; i < gCnt; i++) {
     if (!adjVisited[i]) {
       continue;
@@ -778,8 +851,8 @@ void io::Parser::genGuides_final(frNet *net, vector<frRect> &rects, vector<bool>
     rect.getBBox(box);
     updatedNodeMap[make_pair(frPoint(box.left(),  box.bottom()), rect.getLayerNum())].insert(i);
     updatedNodeMap[make_pair(frPoint(box.right(), box.top()),    rect.getLayerNum())].insert(i);
-    //cout <<"add guide " <<i <<" to " <<frPoint(box.left(),  box.bottom()) <<" " <<rect.getLayerNum() <<endl;
-    //cout <<"add guide " <<i <<" to " <<frPoint(box.right(), box.top())    <<" " <<rect.getLayerNum() <<endl;
+    if(enableOutput) cout <<"add guide " <<i <<" to " <<frPoint(box.left(),  box.bottom()) <<" " <<rect.getLayerNum() <<endl;
+    if(enableOutput) cout <<"add guide " <<i <<" to " <<frPoint(box.right(), box.top())    <<" " <<rect.getLayerNum() <<endl;
   }
   for (auto &[pr, idxS]: updatedNodeMap) {
     auto &[pt, lNum] = pr;
@@ -807,19 +880,34 @@ void io::Parser::genGuides_final(frNet *net, vector<frRect> &rects, vector<bool>
   // guideIdx2Pins enables fiding from guide to pin
   // adjVisited tells guide to write back
   for (int i = 0; i < gCnt; i++) {
-    if (!adjVisited[i]) {
-      continue;
+    if(IO_GUIDE_POSTPROCESSING_MODE ==0){
+      if (!adjVisited[i]) {
+        continue;
+      }
     }
     auto &rect = rects[i];
     frBox box;
     rect.getBBox(box);
-    if (enableOutput) {
-      cout <<"guide final " <<i <<" " <<box <<" " <<design->getTech()->getLayer(rect.getLayerNum())->getName() <<endl;
-    }
+    
     auto guide = make_unique<frGuide>();
     frPoint begin, end;
     design->getTopBlock()->getGCellCenter(box.lowerLeft(), begin);
     design->getTopBlock()->getGCellCenter(box.upperRight(), end);
+    if (enableOutput) {
+      cout <<"guide final " <<i <<" " <<box <<" " <<design->getTech()->getLayer(rect.getLayerNum())->getName() <<endl;
+      // std::cout << "begin.x(): " << begin.x()
+      //           << ", begin.y(): " << begin.y()
+      //           << ", end.x(): " << end.x()
+      //           << ", end.y(): " << end.y() << std::endl;
+
+      // cout << " box.left(): " << box.left()
+      //       << ", box.bottom(): " << box.bottom()
+      //      << ", box.right(): " << box.right()
+      //      << ",  box.top(): " << box.top()  << std::endl;
+      // cout << " rect " << rect << std::endl;
+
+      
+    }
     guide->setPoints(begin, end);
     guide->setBeginLayerNum(rect.getLayerNum());
     guide->setEndLayerNum(rect.getLayerNum());
@@ -832,12 +920,20 @@ void io::Parser::genGuides_final(frNet *net, vector<frRect> &rects, vector<bool>
 void io::Parser::genGuides_buildNodeMap(map<pair<frPoint, frLayerNum>, set<int> > &nodeMap, int &gCnt, int &nCnt,
                                         vector<frRect> &rects, map<frBlockObject*, set<pair<frPoint, frLayerNum> >, frBlockObjectComp> &pin2GCellMap) {
   bool enableOutput = false;
+  if(enableOutput){
+    std::cout << "genGuides_buildNodeMap..." << std::endl;
+  }//end if 
+
   for (int i = 0; i < (int)rects.size(); i++) {
     auto &rect = rects[i];
     frBox box;
     rect.getBBox(box);
     nodeMap[make_pair(box.lowerLeft(), rect.getLayerNum())].insert(i);
     nodeMap[make_pair(box.upperRight(), rect.getLayerNum())].insert(i);
+    if(enableOutput){
+      std::cout << rect.getLayerNum() << " ";
+      box.print();
+    }
   }
   gCnt = rects.size(); // total guide cnt
   int nodeIdx = rects.size();
@@ -863,16 +959,84 @@ void io::Parser::genGuides_buildNodeMap(map<pair<frPoint, frLayerNum>, set<int> 
     nodeIdx++;
   }
   nCnt = nodeIdx; // total node cnt
+
+  if(enableOutput){
+    printNodeMap(nodeMap);
+  }
+
 }
+
+
+
+void io::Parser::printRects(vector<frRect> &rects){
+  std::cout << "print rects ..."<< std::endl;
+  for (auto &rect: rects) {
+    frBox box;
+    rect.getBBox(box);
+    frPoint idx;
+    frPoint pt(box.lowerLeft());
+    design->getTopBlock()->getGCellIdx(pt, idx);
+    frCoord x1 = idx.x();
+    frCoord y1 = idx.y();
+    pt.set(box.right() - 1, box.top() - 1);
+    design->getTopBlock()->getGCellIdx(pt, idx);
+    frCoord x2 = idx.x();
+    frCoord y2 = idx.y();
+    
+    cout << " rect: " << rect << ", l: " << rect.getLayerNum() 
+         << ", x1: "<< x1 
+         << ", y1: " << y1 
+         << ", x2: " << x2
+         << ", y2: " << y2 << "\n";
+    cout << " box.left(): " << box.left()
+          << ", box.bottom(): " << box.bottom()
+          << ", box.right(): " << box.right()
+          << ",  box.top(): " << box.top()  << std::endl;
+    
+  }//end rects loop
+    
+}//end printRects
+
+
+void io::Parser::printNodeMap(map<pair<frPoint, frLayerNum>, set<int> > &nodeMap){
+    std::cout << "print NodeMap ... " << std::endl;
+    for (auto &[pr, idxS]: nodeMap) {
+
+      std::cout << "point: (" << pr.first.x() 
+                << " " << pr.first.y() << " " << pr.second << ") "
+                << "idxs:";
+      for(auto idxTmp2 : idxS){
+          std::cout << " " << idxTmp2;
+      }
+      std::cout << std::endl;
+
+    }
+    std::cout << "print NodeMap Done! " << std::endl;
+}//end printNodeMap
 
 
 
 bool io::Parser::genGuides_astar(frNet* net, vector<bool> &adjVisited, vector<int> &adjPrevIdx, 
                                  map<pair<frPoint, frLayerNum>, set<int> > &nodeMap, int &gCnt, int &nCnt,
                                  bool forceFeedThrough, bool retry) {
-  //bool enableOutput = true;
+  //bool enableOutput = false;
   bool enableOutput = false;
   // a star search
+
+  if(enableOutput){
+      std::cout << "net: " << net->getName() << std::endl;
+      std::cout << "adjVisited " << std::endl;
+      for(auto x : adjVisited){
+        if(x) std::cout << " true "; else std::cout << " false ";
+      }
+      std::cout << std::endl;
+      std::cout << "adjPrevIdx " << std::endl;
+      for(auto x : adjPrevIdx){
+        if(x) std::cout << " " << x;
+      }
+      std::cout << std::endl;
+      std::cout << "gCnt: " << gCnt << ", nCnt: " << nCnt << std::endl;
+    }
 
   // node index, node visited
   vector<vector<int> > adjVec(nCnt, vector<int>());
@@ -882,11 +1046,28 @@ bool io::Parser::genGuides_astar(frNet* net, vector<bool> &adjVisited, vector<in
   adjVisited.resize(nCnt, false);
   adjPrevIdx.resize(nCnt, -1);
   for (auto &[pr, idxS]: nodeMap) {
+    if(enableOutput){
+      std::cout << "point: (" << pr.first.x() 
+                << " " << pr.first.y() << " " << pr.second << ") "
+                << "idxs:";
+                for(auto idxTmp2 : idxS){
+                    std::cout << " " << idxTmp2;
+                }
+      std::cout << std::endl;
+
+    }
     auto &[pt, lNum] = pr;
     for (auto it1 = idxS.begin(); it1 != idxS.end(); it1++) {
       auto it2 = it1;
       it2++;
       auto idx1 = *it1;
+      if(enableOutput){
+        std::cout << "it1: " << *it1 
+                  << ", it2: " << *it2 
+                  << std::endl;
+
+      }
+
       for (; it2 != idxS.end(); it2++) {
         auto idx2 = *it2;
         // two pins, no edge
@@ -935,6 +1116,20 @@ bool io::Parser::genGuides_astar(frNet* net, vector<bool> &adjVisited, vector<in
     }
   }
 
+
+  if(enableOutput){
+    std::cout << "adjVec..." << std::endl;
+    int i_idx = 0;
+    for(auto rowTmp: adjVec){
+      std::cout << "idx: " << i_idx << " connected to: " ;
+      for(auto xy : rowTmp){
+        std::cout << xy << " ";
+      }
+      i_idx++;
+      std::cout << std::endl;
+    }
+  }
+
   struct wf {
     int nodeIdx;
     int prevIdx;
@@ -946,9 +1141,19 @@ bool io::Parser::genGuides_astar(frNet* net, vector<bool> &adjVisited, vector<in
         return cost > b.cost;
       }
     }
+
+    void print(){
+      std::cout << "nodeIdx: " << nodeIdx
+                << ", prevIdx: " << prevIdx
+                << ", cost: " << cost << std::endl;
+    }
   };
+  
   for (int findNode = gCnt; findNode < nCnt - 1; findNode++) {
-    //cout <<"finished " <<findNode <<" nodes" <<endl;
+  
+    if(enableOutput){
+      cout <<"finished " <<findNode <<" nodes" <<endl;
+    }
     priority_queue<wf> pq;
     if (enableOutput) {
       //cout <<"visit";
@@ -976,6 +1181,10 @@ bool io::Parser::genGuides_astar(frNet* net, vector<bool> &adjVisited, vector<in
     while (!pq.empty()) {
       auto wfront = pq.top();
       pq.pop();
+
+      if(enableOutput){
+        wfront.print();
+      }
       if (!onPathIdx[wfront.nodeIdx] && adjVisited[wfront.nodeIdx]) {
         continue;
       }
@@ -1057,4 +1266,369 @@ bool io::Parser::genGuides_astar(frNet* net, vector<bool> &adjVisited, vector<in
   } else {
     return false;
   }
+}//end genGuides_astar
+
+
+bool io::Parser::genGuides_spanningTree(frNet* net, vector<bool> &adjVisited, vector<int> &adjPrevIdx, 
+                                 map<pair<frPoint, frLayerNum>, set<int> > &nodeMap, int &gCnt, int &nCnt,
+                                 bool forceFeedThrough, bool retry) {
+  //bool enableOutput = false;
+  bool enableOutput = false;
+  // a star search
+
+  if(enableOutput){
+      std::cout << "genGuides_spanningTree..." << std::endl;
+      std::cout << "net: " << net->getName() << std::endl;
+      std::cout << "adjVisited " << std::endl;
+      for(auto x : adjVisited){
+        if(x) std::cout << " true "; else std::cout << " false ";
+      }
+      std::cout << std::endl;
+      std::cout << "adjPrevIdx " << std::endl;
+      for(auto x : adjPrevIdx){
+        if(x) std::cout << " " << x;
+      }
+      std::cout << std::endl;
+      std::cout << "gCnt: " << gCnt << ", nCnt: " << nCnt << std::endl;
+    }
+
+  // node index, node visited
+  vector<vector<int> > adjVec(nCnt, vector<int>());
+  vector<bool> onPathIdx(nCnt, false);
+  adjVisited.clear();
+  adjPrevIdx.clear();
+  adjVisited.resize(nCnt, false);
+  adjPrevIdx.resize(nCnt, -1);
+  for (auto &[pr, idxS]: nodeMap) {
+    if(enableOutput){
+      std::cout << "point: (" << pr.first.x() 
+                << " " << pr.first.y() << " " << pr.second << ") "
+                << "idxs:";
+                for(auto idxTmp2 : idxS){
+                    std::cout << " " << idxTmp2;
+                }
+      std::cout << std::endl;
+
+    }
+    auto &[pt, lNum] = pr;
+    for (auto it1 = idxS.begin(); it1 != idxS.end(); it1++) {
+      auto it2 = it1;
+      it2++;
+      auto idx1 = *it1;
+      if(enableOutput){
+        std::cout << "it1: " << *it1 
+                  << ", it2: " << *it2 
+                  << std::endl;
+
+      }
+
+      for (; it2 != idxS.end(); it2++) {
+        auto idx2 = *it2;
+        // two pins, no edge
+        if (idx1 >= gCnt && idx2 >= gCnt) {
+          continue;
+        // two gcells, has edge
+        } else if (idx1 < gCnt && idx2 < gCnt) {
+          // no M1 cross-gcell routing allowed
+          // BX200307: in general VIA_ACCESS_LAYER should not be used (instead of 0)
+          if (lNum != VIA_ACCESS_LAYERNUM) {
+            adjVec[idx1].push_back(idx2);
+            adjVec[idx2].push_back(idx1);
+          }
+          //cout <<"add edge1 " <<idx1 <<" " <<idx2 <<endl;
+        // one pin, one gcell
+        } else {
+          auto gIdx = min(idx1, idx2);
+          auto pIdx = max(idx1, idx2);
+          // only out edge
+          if (ALLOW_PIN_AS_FEEDTHROUGH || forceFeedThrough) {
+            adjVec[pIdx].push_back(gIdx);
+            adjVec[gIdx].push_back(pIdx);
+          } else {
+            if (pIdx == gCnt) {
+              adjVec[pIdx].push_back(gIdx);
+              //cout <<"add edge2 " <<pIdx <<" " <<gIdx <<endl;
+            // only in edge
+            } else {
+              adjVec[gIdx].push_back(pIdx);
+              //cout <<"add edge3 " <<gIdx <<" " <<pIdx <<endl;
+            }
+          }
+        }
+      }
+      // add intersecting guide2guide edge excludes pin
+      if (idx1 < gCnt && nodeMap.find(make_pair(pt, lNum + 2)) != nodeMap.end()) {
+        for (auto nbrIdx: nodeMap[make_pair(pt, lNum + 2)]) {
+          if (nbrIdx < gCnt) {
+            adjVec[idx1].push_back(nbrIdx);
+            adjVec[nbrIdx].push_back(idx1);
+            //cout <<"add edge4 " <<idx1 <<" " <<nbrIdx <<endl;
+            //cout <<"add edge5 " <<nbrIdx <<" " <<idx1 <<endl;
+          }
+        }
+      }
+    }
+  }
+
+  // Till this point the adjacencny graph and its
+  // edges are build.
+  minimum_spanning_tree_prim();
+  minimum_spanning_tree_kruskal();
+
+  if(enableOutput){
+    std::cout << "adjVec..." << std::endl;
+    int i_idx = 0;
+    for(auto rowTmp: adjVec){
+      std::cout << "idx: " << i_idx << " connected to: " ;
+      for(auto xy : rowTmp){
+        std::cout << xy << " ";
+      }
+      i_idx++;
+      std::cout << std::endl;
+    }
+  }
+
+  struct wf {
+    int nodeIdx;
+    int prevIdx;
+    int cost;
+    bool operator<(const wf &b) const {
+      if (cost == b.cost) {
+        return nodeIdx > b.nodeIdx;
+      } else {
+        return cost > b.cost;
+      }
+    }
+
+    void print(){
+      std::cout << "nodeIdx: " << nodeIdx
+                << ", prevIdx: " << prevIdx
+                << ", cost: " << cost << std::endl;
+    }
+  };
+  
+  for (int findNode = gCnt; findNode < nCnt - 1; findNode++) {
+  
+    if(enableOutput){
+      cout <<"finished " <<findNode <<" nodes" <<endl;
+    }
+    priority_queue<wf> pq;
+    if (enableOutput) {
+      //cout <<"visit";
+    }
+    if (findNode == gCnt) {
+      // push only first pin into pq
+      pq.push({gCnt, -1, 0});
+    } else {
+      // push every visited node into pq
+      for (int i = 0; i < nCnt; i++) {
+        if (onPathIdx[i]) {
+          // penalize feedthrough in normal mode
+          if (ALLOW_PIN_AS_FEEDTHROUGH && i >= gCnt) {
+            pq.push({i, adjPrevIdx[i], 2});
+          // penalize feedthrough in fallback mode
+          } else if (forceFeedThrough && i >= gCnt) {
+            pq.push({i, adjPrevIdx[i], 10});
+          } else {
+            pq.push({i, adjPrevIdx[i], 0});
+          }
+        }
+      }
+    }
+    int lastNodeIdx = -1;
+    while (!pq.empty()) {
+      auto wfront = pq.top();
+      pq.pop();
+
+      if(enableOutput){
+        wfront.print();
+      }
+      if (!onPathIdx[wfront.nodeIdx] && adjVisited[wfront.nodeIdx]) {
+        continue;
+      }
+      if (wfront.nodeIdx > gCnt && wfront.nodeIdx < nCnt && adjVisited[wfront.nodeIdx] == false) {
+        adjVisited[wfront.nodeIdx] = true;
+        adjPrevIdx[wfront.nodeIdx] = wfront.prevIdx;
+        if (enableOutput) {
+          //cout <<" " <<wfront.nodeIdx <<" (" <<wfront.cost <<"," <<wfront.prevIdx <<")" <<" exit" <<endl;
+          cout <<"visit " <<wfront.nodeIdx <<" (" <<wfront.cost <<"," <<wfront.prevIdx <<")" <<" exit" <<endl;
+        }
+        lastNodeIdx = wfront.nodeIdx;
+        break;
+      }
+      adjVisited[wfront.nodeIdx] = true;
+      adjPrevIdx[wfront.nodeIdx] = wfront.prevIdx;
+      if (enableOutput) {
+        //cout <<" " <<wfront.nodeIdx <<" (" <<wfront.cost <<"," <<wfront.prevIdx <<")";
+        cout <<"visit " <<wfront.nodeIdx <<" (" <<wfront.cost <<"," <<wfront.prevIdx <<")" <<endl;
+      }
+      // visit other nodes
+      for (auto nbrIdx: adjVec[wfront.nodeIdx]) {
+        if (!adjVisited[nbrIdx]) {
+          pq.push({nbrIdx, wfront.nodeIdx, wfront.cost + 1});
+          if (enableOutput) {
+            cout <<"push " <<nbrIdx <<endl;
+          }
+        }
+      }
+    }
+    // trace back path
+    if (enableOutput) {
+      cout <<"trace back id";
+    }
+    while ((lastNodeIdx != -1) && (!onPathIdx[lastNodeIdx])) {
+      onPathIdx[lastNodeIdx] = true;
+      if (enableOutput) {
+        cout <<" " <<lastNodeIdx <<" (" <<adjPrevIdx[lastNodeIdx] <<")";
+      }
+      lastNodeIdx = adjPrevIdx[lastNodeIdx];
+    }
+    if (enableOutput) {
+      cout <<endl;
+    }
+    adjVisited = onPathIdx;
+  }
+  // skip one-pin net
+  if (nCnt == gCnt + 1) {
+    return true;
+  }
+  if (enableOutput) {
+  cout <<"stat: " <<net->getName() <<" #guide/#pin/#unused = " <<gCnt <<"/" <<nCnt - gCnt <<"/" 
+       <<nCnt - count(adjVisited.begin(), adjVisited.end(), true) <<endl;
+  }
+  int pinVisited = count(adjVisited.begin() + gCnt, adjVisited.end(), true);
+  // true error when allowing feedthrough
+  if (pinVisited != nCnt - gCnt && (ALLOW_PIN_AS_FEEDTHROUGH || forceFeedThrough) && retry) {
+    cout <<"Error: " <<net->getName() <<" " <<nCnt - gCnt - pinVisited <<" pin not visited #guides = " <<gCnt <<endl;
+    if (enableOutput) {
+      for (int i = gCnt; i < nCnt; i++) {
+        if (!adjVisited[i]) {
+          cout <<"  pin id = " <<i <<endl;
+        }
+      }
+    }
+  }
+  // fallback to feedthrough in next iter
+  if (pinVisited != nCnt - gCnt && !ALLOW_PIN_AS_FEEDTHROUGH && !forceFeedThrough && retry) {
+    cout <<"Warning: " <<net->getName() <<" " <<nCnt - gCnt - pinVisited <<" pin not visited, fall back to feedrough mode" <<endl;
+    //if (enableOutput) {
+    //  for (int i = gCnt; i < nCnt; i++) {
+    //    if (!adjVisited[i]) {
+    //      cout <<"  pin id = " <<i <<endl;
+    //    }
+    //  }
+    //}
+  }
+  if (pinVisited == nCnt - gCnt) {
+    return true;
+  } else {
+    return false;
+  }
+}//end genGuides_spanningTree
+
+
+void io::Parser::minimum_spanning_tree_prim(){
+    using namespace boost;
+    typedef adjacency_list < vecS, vecS, undirectedS,
+      property<vertex_distance_t, int>, property < edge_weight_t, int > > Graph;
+    typedef std::pair < int, int >E;
+    const int num_nodes = 5;
+    E edges[] = { E(0, 2), E(1, 3), E(1, 4), E(2, 1), E(2, 3),
+      E(3, 4), E(4, 0)
+    };
+    int weights[] = { 1, 1, 2, 7, 3, 1, 1 };
+  #if defined(BOOST_MSVC) && BOOST_MSVC <= 1300
+    Graph g(num_nodes);
+    property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, g); 
+    for (std::size_t j = 0; j < sizeof(edges) / sizeof(E); ++j) {
+      graph_traits<Graph>::edge_descriptor e; bool inserted;
+      boost::tie(e, inserted) = add_edge(edges[j].first, edges[j].second, g);
+      weightmap[e] = weights[j];
+    }
+  #else
+    Graph g(edges, edges + sizeof(edges) / sizeof(E), weights, num_nodes);
+  #endif
+    std::vector < graph_traits < Graph >::vertex_descriptor >
+      p(num_vertices(g));
+
+  #if defined(BOOST_MSVC) && BOOST_MSVC <= 1300
+    property_map<Graph, vertex_distance_t>::type distance = get(vertex_distance, g);
+    property_map<Graph, vertex_index_t>::type indexmap = get(vertex_index, g);
+    prim_minimum_spanning_tree
+      (g, *vertices(g).first, &p[0], distance, weightmap, indexmap, 
+      default_dijkstra_visitor());
+  #else
+    prim_minimum_spanning_tree(g, &p[0]);
+  #endif
+
+    for (std::size_t i = 0; i != p.size(); ++i)
+      if (p[i] != i)
+        std::cout << "parent[" << i << "] = " << p[i] << std::endl;
+      else
+        std::cout << "parent[" << i << "] = no parent" << std::endl;
+
+
+}//end minimum_spanning_tree_prim
+
+
+void io::Parser::minimum_spanning_tree_kruskal(){
+using namespace boost;
+  typedef adjacency_list < vecS, vecS, undirectedS,
+    no_property, property < edge_weight_t, int > > Graph;
+  typedef graph_traits < Graph >::edge_descriptor Edge;
+  typedef graph_traits < Graph >::vertex_descriptor Vertex;
+  typedef std::pair<int, int> E;
+
+  const int num_nodes = 5;
+  E edge_array[] = { E(0, 2), E(1, 3), E(1, 4), E(2, 1), E(2, 3),
+    E(3, 4), E(4, 0), E(4, 1)
+  };
+  int weights[] = { 1, 1, 2, 7, 3, 1, 1, 1 };
+  std::size_t num_edges = sizeof(edge_array) / sizeof(E);
+#if defined(BOOST_MSVC) && BOOST_MSVC <= 1300
+  Graph g(num_nodes);
+  property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, g);
+  for (std::size_t j = 0; j < num_edges; ++j) {
+    Edge e; bool inserted;
+    boost::tie(e, inserted) = add_edge(edge_array[j].first, edge_array[j].second, g);
+    weightmap[e] = weights[j];
+  }
+#else
+  Graph g(edge_array, edge_array + num_edges, weights, num_nodes);
+#endif
+  property_map < Graph, edge_weight_t >::type weight = get(edge_weight, g);
+  std::vector < Edge > spanning_tree;
+
+  kruskal_minimum_spanning_tree(g, std::back_inserter(spanning_tree));
+
+  std::cout << "Print the edges in the MST:" << std::endl;
+  for (std::vector < Edge >::iterator ei = spanning_tree.begin();
+       ei != spanning_tree.end(); ++ei) {
+    std::cout << source(*ei, g) << " <--> " << target(*ei, g)
+      << " with weight of " << weight[*ei]
+      << std::endl;
+  }
+
+  
+
+  std::ofstream fout("figs/kruskal-eg.dot");
+  fout << "graph A {\n"
+    << " rankdir=LR\n"
+    << " size=\"3,3\"\n"
+    << " ratio=\"filled\"\n"
+    << " edge[style=\"bold\"]\n" << " node[shape=\"circle\"]\n";
+  graph_traits<Graph>::edge_iterator eiter, eiter_end;
+  for (boost::tie(eiter, eiter_end) = edges(g); eiter != eiter_end; ++eiter) {
+    fout << source(*eiter, g) << " -- " << target(*eiter, g);
+    if (std::find(spanning_tree.begin(), spanning_tree.end(), *eiter)
+        != spanning_tree.end())
+      fout << "[color=\"black\", label=\"" << get(edge_weight, g, *eiter)
+           << "\"];\n";
+    else
+      fout << "[color=\"gray\", label=\"" << get(edge_weight, g, *eiter)
+           << "\"];\n";
+  }
+  fout << "}\n";
 }
+
+  

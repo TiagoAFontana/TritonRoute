@@ -49,6 +49,7 @@ namespace fr {
     void ta();
     void dr();
     void endFR();
+    void checkGuideVsDR();
   };
 }
 #endif

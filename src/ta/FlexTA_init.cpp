@@ -487,7 +487,20 @@ void FlexTAWorker::initIroutes() {
       //       <<guide->getNet()->getName() << "\n";
       //}
       //cout <<endl;
-      initIroute(guide);
+      if(DR_CRPFixedNetHelper == "1" ){
+        // if(guide->getNet()->getName() == "net1")
+        if (filter_nets_set.find(guide->getNet()->getName()) !=
+            filter_nets_set.end() && filter_nets_set.size() >0 ){
+              initIroute(guide);
+            }else{
+              initIroute(guide);
+            }
+          
+      }else{
+        initIroute(guide);
+      }
+
+      
     }
   }
 

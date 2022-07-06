@@ -42,7 +42,23 @@ namespace fr {
   class frNet: public frBlockObject {
   public:
     // constructors
-    frNet(const frString &in): frBlockObject(), name(in), instTerms(), terms(), shapes(), vias(), pwires(), guides(), type(frNetEnum::frcNormalNet), modified(false), isFakeNet(false) {}
+    frNet(const frString &in): frBlockObject(), name(in), instTerms(), terms(), shapes(), vias(), pwires(), guides(), type(frNetEnum::frcNormalNet), modified(false), isFakeNet(false)
+                            , net_timer(0), count_reroute(0),routeNet_timer(0) {
+      routeNet_prep_timer=0;
+      routeNet_prepAreaMap_timer = 0;
+      routeNet_setSrc_timer = 0;
+      mazePinInit_timer = 0;
+      routeNet_getNextDst_timer = 0;
+      gridGraph_search_timer = 0;
+      routeNet_postAstarUpdate_timer = 0;
+      routeNet_postAstarWritePath_timer = 0;
+      routeNet_postAstarPatchMinAreaVio_timer = 0;
+      routeNet_postRouteAddPathCost_timer = 0;
+      gridGraph_search_inside_timer = 0;
+      gridGraph_getAccessPatterns_timer = 0;
+      gridGraph_connComps_timer = 0;
+      gridGraph_traceBackPath_timer = 0;
+    }
     // getters
     const frString& getName() const {
       return name;
@@ -133,6 +149,24 @@ namespace fr {
     virtual frBlockObjectEnum typeId() const override {
       return frcNet;
     }
+
+    double                           net_timer;
+    double                           count_reroute;
+    double                           routeNet_timer;
+    double                           routeNet_prep_timer;
+    double                           routeNet_prepAreaMap_timer;
+    double                           routeNet_setSrc_timer;
+    double                           mazePinInit_timer;
+    double                           routeNet_getNextDst_timer;
+    double                           gridGraph_search_timer;
+    double                           routeNet_postAstarUpdate_timer;
+    double                           routeNet_postAstarWritePath_timer;
+    double                           routeNet_postAstarPatchMinAreaVio_timer;
+    double                           routeNet_postRouteAddPathCost_timer;
+    double                           gridGraph_search_inside_timer;
+    double                           gridGraph_getAccessPatterns_timer;
+    double                           gridGraph_connComps_timer;
+    double                           gridGraph_traceBackPath_timer;
   protected:
     frString                                  name;
     std::vector<frInstTerm*>                  instTerms;

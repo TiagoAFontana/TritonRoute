@@ -317,6 +317,7 @@ int netf(defrCallbackType_e c, defiNet* net, defiUserData ud) {
 // 5/6/2004 - don't need since I have a callback for the name
 //  else
 //      fprintf(fout, "- %s ", net->name());
+  
  
 //  net->changeNetName("newNetName");
 //  fprintf(fout, "%s ", net->name());

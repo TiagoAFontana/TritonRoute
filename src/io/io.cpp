@@ -640,6 +640,14 @@ int io::Parser::Callbacks::getDefNets(defrCallbackType_e type, defiNet* net, def
   frCoord top        = -1;
   frCoord width      = 0;
   for (int i = 0; i < (int)net->numWires(); i++) {
+    if(DR_CRPFixedNetHelper == "1" ){
+      if (filter_nets_set.find(net->name()) !=
+          filter_nets_set.end() && filter_nets_set.size() > 0){
+            continue; 
+          }
+    }
+
+
     defiWire* tmpWire = net->wire(i);
     //cout << "Wire " << i << "\n";
     //cout << "  Type: " << tmpWire->wireType() << endl;
@@ -772,7 +780,62 @@ int io::Parser::Callbacks::getDefNets(defrCallbackType_e type, defiNet* net, def
       auto layerNum = parser->tech->name2layer[layerName]->getLayerNum();
       // add rect
       if (hasRect) {
-        continue;
+        frPoint p;
+        if (hasEndPoint) {
+          p.set(endX, endY);
+        } else {
+          p.set(beginX, beginY);
+        }
+
+        // auto tmpP = make_unique<drPatchWire>();
+        auto tmpPWire = make_unique<frPatchWire>();
+        tmpPWire->setLayerNum(layerNum);
+        tmpPWire->setOrigin(p);
+        frBox box(frPoint(left, bottom), frPoint(right, top));
+        tmpPWire->setOffsetBox(box);
+
+        // std::cout << "hoooy it has rectangle!" << std::endl;
+        // std::cout << net->name() << std::endl;
+        // std::cout << "left: " << left
+        //           << ", bottom: " << bottom
+        //           << ", right: " << right
+        //           << ", top: " << top << std::endl;
+        // tmpP->setPoints(frPoint(left, bottom), frPoint(right, top));
+        tmpPWire->addToNet(netIn);
+        
+        netIn->addPatchWire(std::move(tmpPWire));
+        // width = (width) ? width : parser->tech->name2layer[layerName]->getWidth();
+        // auto defaultBeginExt = width / 2;
+        // auto defaultEndExt   = width / 2;
+
+        // frEndStyleEnum tmpBeginEnum;
+        // if (beginExt == -1) {
+        //   tmpBeginEnum = frcExtendEndStyle;
+        // } else if (beginExt == 0) {
+        //   tmpBeginEnum = frcTruncateEndStyle;
+        // } else {
+        //   tmpBeginEnum = frcVariableEndStyle;
+        // }
+        // frEndStyle tmpBeginStyle(tmpBeginEnum);
+
+        // frEndStyleEnum tmpEndEnum;
+        // if (endExt == -1) {
+        //   tmpEndEnum = frcExtendEndStyle;
+        // } else if (endExt == 0) {
+        //   tmpEndEnum = frcTruncateEndStyle;
+        // } else {
+        //   tmpEndEnum = frcVariableEndStyle;
+        // }
+        // frEndStyle tmpEndStyle(tmpEndEnum);
+
+        // frSegStyle tmpSegStyle;
+        // tmpSegStyle.setWidth(width);
+        // tmpSegStyle.setBeginStyle(tmpBeginStyle, tmpBeginEnum == frcExtendEndStyle ? defaultBeginExt : beginExt);
+        // tmpSegStyle.setEndStyle(tmpEndStyle, tmpEndEnum == frcExtendEndStyle ? defaultEndExt : endExt);
+        // tmpP->setStyle(tmpSegStyle);
+        // netIn->addShape(std::move(tmpP));
+
+        // continue;
       }
 
       // add wire, currently do not consider extension
@@ -5327,9 +5390,12 @@ void io::Writer::fillConnFigs(bool isTA) {
   if (VERBOSE > 0) {
     cout <<endl <<"post processing ..." <<endl;
   }
+
+  
   for (auto &net: getDesign()->getTopBlock()->getNets()) {
     fillConnFigs_net(net.get(), isTA);
   }
+  
   if (isTA) {
     for (auto &it: connFigs) {
       mergeSplitConnFigs(it.second);
@@ -5345,7 +5411,7 @@ void io::Writer::writeFromTA() {
     }
   } else {
     //if (VERBOSE > 0) {
-    //  cout <<endl <<"start writing track assignment def" <<endl;
+     cout <<endl <<"start writing track assignment def" <<endl;
     //}
     fillConnFigs(true);
     fillViaDefs();
@@ -5364,7 +5430,15 @@ void io::Writer::writeFromDR(const string &str) {
     //  cout <<endl <<"start writing routed def" <<endl;
     //}
   }
+  if(DR_CRPFixedNetHelper == "1" ) 
+    std::cout << "fillConnFigs" << std::endl;
   fillConnFigs(false);
+  if(DR_CRPFixedNetHelper == "1" ) 
+    std::cout << "fillViaDefs" << std::endl;
   fillViaDefs();
+  if(DR_CRPFixedNetHelper == "1" ) 
+    std::cout << "writeDef" << std::endl;
   writeDef(false, str);
+  if(DR_CRPFixedNetHelper == "1" ) 
+    std::cout << "end writeDef" << std::endl;
 }
